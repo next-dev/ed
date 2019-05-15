@@ -61,6 +61,56 @@ Page:
         ; C = Page
 
 ;;----------------------------------------------------------------------------------------------------------------------
+;; Editor paletter control
+
+Palette:
+        db  %00000000
+        db  %00000010
+        db  %10000000
+        db  %10000010
+        db  %00010000
+        db  %00010010
+        db  %10010000
+        db  %10010010
+        db  %01101101
+        db  %00000011
+        db  %11100000
+        db  %11100011
+        db  %00011100
+        db  %00011111
+        db  %11111100
+        db  %11111111
+
+SetColour:
+        ; Input:
+        ;   B = Paper
+        ;   C = Ink
+        ;   A = Slot (0-15)
+        ; Destroys:
+        ;   HL, DE, BC, A
+        nextreg $43,%00110000   ; Set tilemap palette
+        sla     a
+        sla     a
+        sla     a
+        sla     a
+        nextreg $40,a
+        ; Paper colour
+        ld      de,Palette
+        ld      l,b
+        ld      h,0
+        add     hl,de
+        ld      a,(hl)
+        nextreg $41,a
+        ; Ink colour
+        ld      de,Palette
+        ld      l,c
+        ld      h,0
+        add     hl,de
+        ld      a,(hl)
+        nextreg $41,a
+        ret
+
+;;----------------------------------------------------------------------------------------------------------------------
 ;; Initialise
 ;; Initialise the screen and video modes
 
@@ -68,82 +118,21 @@ Initialise:
         xor     a
         out     (254),a
 
-        ; Initialise palette                RRR GGG BB
-        ;       $01 = black                 000 000 00
-        ;       $11 = blue                  000 000 10
-        ;       $21 = red                   100 000 00
-        ;       $31 = magenta               100 000 10
-        ;       $41 = green                 000 100 00
-        ;       $51 = cyan                  000 100 10
-        ;       $61 = yellow                100 100 00
-        ;       $71 = light grey            100 100 10
-        ;       $81 = dark grey             011 011 01
-        ;       $91 = bright blue           000 000 11
-        ;       $a1 = bright red            111 000 00
-        ;       $b1 = bright magenta        111 000 11
-        ;       $c1 = bright green          000 111 00
-        ;       $d1 = bright cyan           000 111 11
-        ;       $e1 = bright yellow         111 111 00
-        ;       $f1 = white                 111 111 11
-        ; 
-        nextreg $43,%00110000   ; Set tilemap palette
-        nextreg $40,$00
-        nextreg $41,%00000000
-        nextreg $41,%00000000
-        nextreg $40,$10
-        nextreg $41,%00000000
-        nextreg $41,%00000010
-        nextreg $40,$20
-        nextreg $41,%00000000
-        nextreg $41,%10000000
-        nextreg $40,$30
-        nextreg $41,%00000000
-        nextreg $41,%10000010
-        nextreg $40,$40
-        nextreg $41,%00000000
-        nextreg $41,%00010000
-        nextreg $40,$50
-        nextreg $41,%00000000
-        nextreg $41,%00010010
-        nextreg $40,$60
-        nextreg $41,%00000000
-        nextreg $41,%10010000
-        nextreg $40,$70
-        nextreg $41,%00000000
-        nextreg $41,%10010010
-        nextreg $40,$80
-        nextreg $41,%00000000
-        nextreg $41,%01101101
-        nextreg $40,$90
-        nextreg $41,%00000000
-        nextreg $41,%00000011
-        nextreg $40,$a0
-        nextreg $41,%00000000
-        nextreg $41,%11100000
-        nextreg $40,$b0
-        nextreg $41,%00000000
-        nextreg $41,%11100011
-        nextreg $40,$c0
-        nextreg $41,%00000000
-        nextreg $41,%00011100
-        nextreg $40,$d0
-        nextreg $41,%00000000
-        nextreg $41,%00011111
-        nextreg $40,$e0
-        nextreg $41,%00000000
-        nextreg $41,%11111100
-        nextreg $40,$f0
-        nextreg $41,%00000000
-        nextreg $41,%11111111
+        ; Initialise palette
+        ld      bc,$000e        ; Paper/ink combination (bright yellow)
+        xor     a               ; For slot 0
+        call    SetColour
+        ld      bc,$000a        ; Paper/ink combination (bright red)
+        ld      a,1             ; For slot 1
+        call    SetColour
 
-
-        ; Clear screen
+        ; Clear screen (write spaces in colour 0 everywhere)
         ld      bc,2560
         ld      hl,$4000
 .l1     ld      a,' '
         ld      (hl),a
         inc     hl
-        ld      a,%00100000
+        xor     a
         ld      (hl),a
         inc     hl
         dec     bc
@@ -230,10 +219,10 @@ Hello
 Main:
         ld      bc,$0101
         ld      de,Hello
-        ld      a,6+8
+        ld      a,0
         call    Print
         ld      bc,$0108
-        ld      a,2+8
+        ld      a,1
         call    Print
         jp      Main
 
