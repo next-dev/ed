@@ -166,24 +166,6 @@ Initialise:
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Printing routines
 
-Mul80:
-        ; Input:
-        ;   HL = x
-        ; Returns:
-        ;   HL = 80*x
-        push    de
-        add     hl,hl       ; *2
-        add     hl,hl       ; *4
-        add     hl,hl       ; *8
-        add     hl,hl       ; *16
-        ld      e,l
-        ld      d,h         ; DE = HL*16
-        add     hl,hl       ; *32
-        add     hl,hl       ; *64
-        add     hl,de       ; *80
-        pop     de
-        ret
-
 CalcTileAddress:
         ; Input:
         ;   B = Y coord (0-31)
@@ -192,11 +174,14 @@ CalcTileAddress:
         ;   HL = Tile address
         ; Destroys:
         ;   BC
-        ld      l,b
-        ld      h,0         ; HL = Y
-        call    Mul80       ; HL = (Y * 80)
+        push    de
+        ld      e,b
+        ld      d,80
+        mul                 ; DE = 80Y
+        ex      de,hl       ; HL = 80Y
+        pop     de
         ld      b,0
-        add     hl,bc       ; HL = (Y * 80) + X
+        add     hl,bc       ; HL = 80Y+X
         add     hl,hl       ; 2 bytes per tilemap cell
         ld      bc,$4000    ; Base address of tilemap
         add     hl,bc
