@@ -24,54 +24,12 @@ REPPER  equ     $5c0a
 FLAGS   equ     $5c3b
 MODE    equ     $5c41
 
-;;
-;; Constants
-;;
-
-EOL     equ     $0a
-EOF     equ     $1a
-
-;;----------------------------------------------------------------------------------------------------------------------
-;; Memory map
-
-; $0000     ROM
-; $2000     ROM
-; $
-
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Font
 
         org     $6400
 
         incbin  "data/font.bin"
-
-;;----------------------------------------------------------------------------------------------------------------------
-;; Sample text
-
-        org     $c000
-
-        incbin  "data/test.txt"
-        db      26
-
-textlen equ * - $c000
-
-;;----------------------------------------------------------------------------------------------------------------------
-;; Editor state
-
-        org     $6000
-
-; Presentation state
-top             dw      0           ; Offset of character shown at start of top line
-dx              dw      0           ; Indent
-mark            dw      0           ; Virtual offset into doc where cursor is
-cursorX         db      0           ; Screen X coord of cursor
-cursorY         db      0           ; Screen Y coord of cursor
-cursorLine      dw      0           ; Line which cursor resides
-
-; Buffer state
-gapstart        dw      0           ; Offset into buffer of gap start
-gapend          dw      0           ; Offset into buffer of gap end
-
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Start
@@ -161,12 +119,7 @@ Initialise:
         out     (254),a
 
         ; Initialise palette
-        ;
-        ;   0   Normal text
-        ;   1   Cursor
-        ;   2   Inverse text
-        ;
-        ld      bc,$0007        ; Paper/ink combination (bright yellow on black)
+        ld      bc,$000e        ; Paper/ink combination (bright yellow on black)
         xor     a               ; For slot 0
         call    SetColour
         ld      bc,$000a        ; Paper/ink combination (bright red on black)
@@ -304,123 +257,17 @@ ClearScreen:
         ret
 
 ;;----------------------------------------------------------------------------------------------------------------------
-;; Cursor management
+;; Main
+;; The main loop
 
-VirtToReal:
-        ; Convert a virtual mark to a real mark.  Virtual marks represent an offset into the document.
-        ; Real marks are actual offsets into the memory the document resides and respects the buffer gap.
-        ;
-        ; Input:
-        ;   HL = virtual mark
-        ; Output:
-        ;   HL = real mark
-        ret
+Title   db      "Ed (V0.1)",0
+Footnote:
+        db      "Ln 0001  Col 0001",0
 
-;;----------------------------------------------------------------------------------------------------------------------
-;; Display
+TestStr:
+        ds      256
 
-Title       db      "Ed (V0.1)",0
-Footnote    db      "Ln 0001  Col 0001",0
-
-FindScrollStart:
-        ; Scan a line to find the first character that is on the left side of the screen.  If the line is shorter
-        ; than the scrolled offset, return the address of the newline
-        ;
-        ; Input:
-        ;   HL = start of line
-        ; Output:
-        ;   HL = start of line on left side of screen, or pointing to $0a/$1b at end of line
-        ; Destroys
-        ;   A
-        ;
-        ld      a,(dx)
-        and     a
-        ret     z
-        push    bc
-        ld      b,a
-.l1     ld      a,(hl)
-        cp      EOL         ; Is it new line?
-        jr      z,.finish
-        cp      EOF
-        jr      z,.finish
-        inc     hl
-        djnz    .l1
-.finish
-        pop     bc
-        ret
-
-FindNextLine:
-        ; Find the address of the next line or address of $1a character if EOF found.
-        ;
-        ; Input:
-        ;   HL = Document address
-        ; Output:
-        ;   HL = Address of next line
-        ; Destroys:
-        ;   A
-        ;
-        ld      a,(hl)
-        cp      EOL             ; Test for end of line
-        jr      z,.eol_found
-        cp      EOF             ; Test for end of file
-        ret     z               ; HL stays pointing to EOF
-        inc     hl
-        jr      FindNextLine
-.eol_found:
-        inc     hl              ; Move past end of line
-        ret
-
-
-DisplayRow:
-        ; Display a single row of text on the screen
-        ; 
-        ; Input
-        ;   HL = beginning of row
-        ;   DE = tilemap address
-        ; Output
-        ;   HL = beginning of next document line
-        ;   DE = points to next line on tilemap
-        ; Destroys
-        ;   A
-        ;
-        push    bc
-        call    FindScrollStart     ; HL = beginning of visible row
-        ld      b,80
-.l1     ld      a,(hl)
-        cp      EOL
-        jr      z,.endline
-        cp      EOF
-        jr      z,.endline
-        ld      (de),a          ; Write character
-        inc     hl
-        inc     de
-        xor     a               ; Normal text colours
-        ld      (de),a          ; Write attribute
-        inc     de
-        djnz    .l1
-
-        ; Managed to fill whole row of screen
-        call    FindNextLine
-        pop     bc
-        ret
-
-.endline
-        call    FindNextLine    ; Skip to next line, ready for next display row
-        ld      c,' '
-        xor     a
-        ex      de,hl
-.l2     ld      (hl),c          ; Write out space
-        inc     hl
-        ld      (hl),a          ; Write out attribute
-        inc     hl
-        djnz    .l2
-        ex      de,hl
-        pop     bc
-        ret
-
-
-
-DisplayScreen:
+Main:
         ; Title
         ld      bc,$0000        ; At (0,0)
         ld      de,$0150        ; 80x1
@@ -431,7 +278,7 @@ DisplayScreen:
         ld      a,2
         call    Print
 
-        ; Status bar
+        ; Footnote
         ld      bc,$1f00
         ld      de,$0150
         ld      a,2
@@ -441,33 +288,26 @@ DisplayScreen:
         ld      a,2
         call    Print
 
-        ; Write the rows
-        ld      bc,$0100
-        call    CalcTileAddress
-        ex      de,hl           ; DE = Tile address
-        push    de
-        ld      hl,(top)        ; HL = Pointer to document that is at the top
-        ld      de,$c000
-        add     hl,de           ; Convert to real address
-        pop     de
-        ld      b,30
-.l1     call    DisplayRow
+        ; Test
+        ld      b,255
+        ld      hl,TestStr
+        ld      a,1
+.l1     ld      (hl),a
+        inc     hl
+        inc     a
         djnz    .l1
-        ret
+        xor     a
+        ld      (hl),a
 
 
-
-;;----------------------------------------------------------------------------------------------------------------------
-;; Main
-;; The main loop
-
-Main:
-        call    DisplayScreen
+        ld      bc,$0100
+        ld      de,TestStr
+        ld      a,1
+        call    Print
 
 EndForever:
         jp      EndForever
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------------------------------------------
-
 
