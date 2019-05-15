@@ -119,26 +119,17 @@ Initialise:
         out     (254),a
 
         ; Initialise palette
-        ld      bc,$000e        ; Paper/ink combination (bright yellow)
+        ld      bc,$000e        ; Paper/ink combination (bright yellow on black)
         xor     a               ; For slot 0
         call    SetColour
-        ld      bc,$000a        ; Paper/ink combination (bright red)
+        ld      bc,$000a        ; Paper/ink combination (bright red on black)
         ld      a,1             ; For slot 1
         call    SetColour
+        ld      bc,$0700        ; Paper/ink combination (black on white)
+        ld      a,2
+        call    SetColour
 
-        ; Clear screen (write spaces in colour 0 everywhere)
-        ld      bc,2560
-        ld      hl,$4000
-.l1     ld      a,' '
-        ld      (hl),a
-        inc     hl
-        xor     a
-        ld      (hl),a
-        inc     hl
-        dec     bc
-        ld      a,b
-        or      c
-        jr      nz,.l1
+        call    ClearScreen
 
         ; Set up the tilemap
         ; Memory map:
@@ -189,11 +180,11 @@ Print:
 
         ; Calculate tilemap address
         call    CalcTileAddress
+        add     a,a
+        add     a,a
+        add     a,a
+        add     a,a
         ld      c,a
-        sla     c
-        sla     c
-        sla     c
-        sla     c           ; Move colour to bits 7-3
 .l1     ld      a,(de)      ; Write out character
         and     a
         jr      z,.finish
@@ -207,24 +198,95 @@ Print:
 .finish inc     de
         ret
 
+WriteSpace:
+        ; Draw a rectangular area of spaces
+        ; Input
+        ;   B = Y coord (0-31) of start
+        ;   C = X coord (0-79) of start
+        ;   D = height
+        ;   E = width
+        ;   A = colour (0-15)
+        ; Destroys
+        ;   HL, BC, DE, A
+        call    CalcTileAddress     ; HL = start corner
+        add     a,a
+        add     a,a
+        add     a,a
+        add     a,a
+        ld      c,a                 ; C = colour
+        ld      b,e                 ; Save width
+.row    ld      e,b                 ; Restore width
+
+        push    hl
+
+.col    ld      a,' '               ; Write space
+        ld      (hl),a
+        inc     hl
+        ld      (hl),c              ; Write colour
+        inc     hl
+        dec     e
+        jr      nz,.col
+
+        ; Move HL to next row
+        pop     hl
+        ld      e,160
+        ld      a,d                 ; Save row counter
+        ld      d,0
+        add     hl,de               ; HL = next row
+        ld      d,a
+        dec     d
+        jr      nz,.row
+        ret
+
+ClearScreen:
+        ; Clear screen (write spaces in colour 0 everywhere)
+        ; Destroys
+        ;   BC, HL, A
+        ld      bc,2560
+        ld      hl,$4000
+.l1     ld      a,' '
+        ld      (hl),a
+        inc     hl
+        xor     a
+        ld      (hl),a
+        inc     hl
+        dec     bc
+        ld      a,b
+        or      c
+        jr      nz,.l1
+        ret
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Main
 ;; The main loop
 
-Hello
-        db      "Hello,",0
-        db      "World!",0
+Title   db      "Ed (V0.1)",0
+Footnote:
+        db      "Ln 0001  Col 0001",0
 
 Main:
-        ld      bc,$0101
-        ld      de,Hello
-        ld      a,0
+        ; Title
+        ld      bc,$0000        ; At (0,0)
+        ld      de,$0150        ; 80x1
+        ld      a,2             ; Colour 2
+        call    WriteSpace
+        ld      bc,$0001
+        ld      de,Title
+        ld      a,2
         call    Print
-        ld      bc,$0108
-        ld      a,1
+
+        ; Footnote
+        ld      bc,$1f00
+        ld      de,$0150
+        ld      a,2
+        call    WriteSpace
+        ld      bc,$1f01
+        ld      de,Footnote
+        ld      a,2
         call    Print
-        jp      Main
+
+EndForever:
+        jp      EndForever
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------------------------------------------
