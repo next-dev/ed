@@ -208,6 +208,8 @@ Print:
         ;   C = X coord (0-79)
         ;   DE = string
         ;   A = colour (0-15)
+        ; Output:
+        ;   DE = points after string
         ; Destroys:
         ;   BC, HL, DE, A
 
@@ -228,7 +230,8 @@ Print:
         inc     hl
         inc     de
         jr      .l1
-.finish ret
+.finish inc     de
+        ret
 
 
 ;;----------------------------------------------------------------------------------------------------------------------
@@ -236,12 +239,16 @@ Print:
 ;; The main loop
 
 Hello
-        db      "Hello, World!",0
+        db      "Hello,",0
+        db      "World!",0
 
 Main:
         ld      bc,$0101
         ld      de,Hello
-        ld      a,6
+        ld      a,6+8
+        call    Print
+        ld      bc,$0108
+        ld      a,2+8
         call    Print
         jp      Main
 
