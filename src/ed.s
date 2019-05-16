@@ -41,7 +41,7 @@ EOF     equ     $1a
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Font
 
-        org     $6400
+        org     $6000
 
         incbin  "data/font.bin"
 
@@ -507,26 +507,27 @@ DisplayScreen:
 ;
 ; Keyboard ASCII codes (00-1F)
 ;
-;   00                      10  Sym+Y
-;   01  Edit                11  Sym+U
-;   02  Capslock            12  Sym+I
-;   03  True Video          13  Sym+A
-;   04  Inv Video           14  Sym+S
-;   05  Left                15  Sym+D
-;   06  Down                16  Sym+F
-;   07  Up                  17  Sym+G
+;   00                      10  Sym+W X
+;   01  Edit                11  Sym+E X
+;   02  Capslock            12  Sym+I X
+;   03  True Video          13  
+;   04  Inv Video           14  
+;   05  Left                15  
+;   06  Down                16  
+;   07  Up                  17  
 ;   08  Right               18  
 ;   09  Graph/TAB           19  
 ;   0A  Delete              1A  
-;   0B                      1B  Break
-;   0C                      1C  
-;   0D  Enter               1D  
-;   0E                      1E  
-;   0F                      1F  
+;   0B                      1B  Break (Caps & Space)
+;   0C                      1C  (Sym & Space)
+;   0D  Enter               1D  Shift+Enter
+;   0E                      1E  Sym+Enter
+;   0F  Ext X               1F  Ext+Enter X
 ;
 ; Keyboard ASCII codes (80-FF)
 ;
-;   81-9A - Ext+Letter
+;   B0-B9 - Ext+Number
+;   E1-FA - Ext+Letter
 
 KeyScan:
         ld      bc,$fefe        ; First keyboard port
@@ -589,7 +590,13 @@ KeyScan:
         in      a,($fe)         ; Read SYM shift row
         or      %11100010       ; Ignore sym shift
         cp      h
-        jp      nz,.error       ; Another key was pressed
+        jr      z,.keyhit_1
+.error:
+        xor     a
+        ld      h,a
+        ld      l,a
+        scf
+        ret
 
 .keyhit_1:
         ; Only one key row is active.  Determine ASCII code from translation table
@@ -645,46 +652,79 @@ RowTable:
 
 KeyTrans:
         ; Unshifted
-        db      255,'z','x','c','v'
+        db      $ff,'z','x','c','v'
         db      'a','s','d','f','g'
         db      'q','w','e','r','t'
         db      '1','2','3','4','5'
         db      '0','9','8','7','6'
         db      'p','o','i','u','y'
-        db       13,'l','k','j','h'
-        db      ' ',255,'m','n','b'
+        db      $0d,'l','k','j','h'
+        db      ' ',$ff,'m','n','b'
 
         ; CAPS shifted
-        db      255,'Z','X','C','V'
+        db      $ff,'Z','X','C','V'
         db      'A','S','D','F','G'
         db      'Q','W','E','R','T'
-        db      '1','2','3','4','5'
-        db      '0','9','8','7','6'
+        db      $01,$02,$03,$04,$05
+        db      $0a,$09,$08,$07,$06
         db      'P','O','I','U','Y'
-        db       13,'L','K','J','H'
-        db      ' ',255,'M','N','B'
+        db      $1d,'L','K','J','H'
+        db      $1b,$ff,'M','N','B'
 
+        ; SYM shifted
+        db      $ff,':','`','?','/'
+        db      '~','|','\','{','}'
+        db      $7f,'w','e','<','>'
+        db      '!','@','#','$','%'
+        db      '_',')','(',$27,'&'
+        db      $22,';','i',']','['
+        db      $1e,'=','+','-','^'
+        db      $1c,$ff,'.',',','*'
+
+        ; EXT shifted
+        db      $ff,    'z'+$80,'x'+$80,'c'+$80,'v'+$80
+        db      'a'+$80,'s'+$80,'d'+$80,'f'+$80,'g'+$80
+        db      'q'+$80,'w'+$80,'e'+$80,'r'+$80,'t'+$80
+        db      '1'+$80,'2'+$80,'3'+$80,'4'+$80,'5'+$80
+        db      '0'+$80,'9'+$80,'8'+$80,'7'+$80,'6'+$80
+        db      'p'+$80,'o'+$80,'i'+$80,'u'+$80,'y'+$80
+        db      $0d,    'l'+$80,'k'+$80,'j'+$80,'h'+$80
+        db      ' ',    $ff,    'm'+$80,'n'+$80,'b'+$80
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Main
 ;; The main loop
 
 Main:
+;break
         ;call    DisplayScreen
         call    KeyScan
-        inc     e
+        jr      c,Main
+        ld      a,l
+        cp      h
         jr      z,Main
 
-        dec     e
-        ld      b,0
-        ld      c,e
-        ld      de,$0031
-        call    PrintChar
+        bit     7,l
+        jr      nz,.ExtKeys
 
-EndForever:
+        ld      b,0
+        ld      c,l
+        ld      d,0
+        ld      e,l
+        call    PrintChar
         jp      Main
 
-;;----------------------------------------------------------------------------------------------------------------------
-;;----------------------------------------------------------------------------------------------------------------------
+.ExtKeys:
+        ld      b,0
+        ld      a,l
+        and     $7f
+        ld      c,a
+        ld      d,1
+        ld      e,a
+        call    PrintChar
+        jp      Main
 
 
+
+;;----------------------------------------------------------------------------------------------------------------------
+;;----------------------------------------------------------------------------------------------------------------------
