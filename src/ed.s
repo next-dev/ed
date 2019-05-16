@@ -477,70 +477,192 @@ DisplayScreen:
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Keyboard routines
-;; Lifted and adapated from the ROM
+;; Lifted and adapated from:
+;;
+;; https://github.com/z88dk/z88dk/blob/master/libsrc/_DEVELOPMENT/input/zx/z80/asm_in_inkey.asm
+;; https://github.com/z88dk/z88dk/blob/master/libsrc/_DEVELOPMENT/input/zx/z80/in_key_translation_table.asm
+
+;;----------------------------------------------------------------------------------------------------------------------
+
 
 ; Scans the keyboard and returns button code
 ;
 ; Output:
-;   D =
-;   E = button code of pressed key (0-39) or $ff if no key is pressed
-;   A = button code of pressed key (0-39) or $ff if no key is pressed
-;   ZF = 0 if nore than two keys are pressed or neither pair of keys is a shift (i.e. invalid)
+;   HL = ASCII code or 0 on no keys, or invalid
+;   CF = 1 on error
+; Destroys:
+;   BC, DE, HL, A
+;
+; Rows are:
+;   Bits:   0       1       2       3       4
+;   ----------------------------------------------
+;   $FE     Caps    Z       X       C       V
+;   $FD     A       S       D       F       G
+;   $FB     Q       W       E       R       T
+;   $F7     1       2       3       4       5
+;   $EF     0       9       8       7       6
+;   $DF     P       O       I       U       Y
+;   $BF     Enter   L       K       J       H
+;   $7F     Space   Sym     M       N       B
+;
+; Keyboard ASCII codes (00-1F)
+;
+;   00                      10  Sym+Y
+;   01  Edit                11  Sym+U
+;   02  Capslock            12  Sym+I
+;   03  True Video          13  Sym+A
+;   04  Inv Video           14  Sym+S
+;   05  Left                15  Sym+D
+;   06  Down                16  Sym+F
+;   07  Up                  17  Sym+G
+;   08  Right               18  
+;   09  Graph/TAB           19  
+;   0A  Delete              1A  
+;   0B                      1B  Break
+;   0C                      1C  
+;   0D  Enter               1D  
+;   0E                      1E  
+;   0F                      1F  
+;
+; Keyboard ASCII codes (80-FF)
+;
+;   81-9A - Ext+Letter
 
 KeyScan:
-        ld      l,$2f           ; Initial preset value
-        ld      de,$ffff        ; DE = no key, 2 key cache
-        ld      bc,$fefe        ; B = row address, C = port address
+        ld      bc,$fefe        ; First keyboard port
+        ld      de,$0500        ; E = offset into key translation table
+        ld      hl,$ffe0        ; Constants used in loop
 
-.key_line:
-        in      a,(c)           ; Read from the keyboard port
-        cpl                     ; Make 1 = key down
-        and     $1f             ; We only care about the lower 5 bits (since 5 keys per line)
-        jr      z,.no_key       ; No keys being pressed?
+        ; First row contains Caps-Shift
+        in      a,(c)           ; Read first row
+        or      %11100001       ; Disable the CAPS-Shift
+        cp      h
+        jr      nz,.keyhit_0    ; Key is pressed in this row
 
-        ld      h,a             ; H = key state of the 5 keys in this line
-        ld      a,l
-.three_keys:
-        inc     d
-        ret     nz              ; More than 1 non-shift key pressed?
+        ld      e,d
+        rlc     b
 
-.key_bits:
-        ; Possible values on first row:
-        ;   27, 1f, 17, 0f, 07
-        ; Possible values on second row:
-        ;   26, 1e, 26, 0e, 06
-        ; 
-        ; and so on...
-        sub     8               ; Continuously subtract 8 from the preset value until a key bit is found
-        srl     h
-        jr      nc,.key_bits
-        ld      d,e             ; Copy an earlier key value to the D register
-        ld      e,a             ; E = new key value
-        jr      nz,.key_bits    ; If there are more keys, then jump back
+.row_loop:
+        in      a,(c)           ; Read keys
+        or      l               ; Complete the 8 bits
+        cp      h               ; Key pressed?
+        jr      nz,.keyhit_0    ; Yes, jump
 
-.no_key:
-        dec     l               ; Next initial preset value for next row
-        rlc     b               ; Next line
-        jr      c,.key_line     ; The one 0 bit will roll off the end when all 8 rows are done.  If not, CF is set.
+        ld      a,e
+        add     a,d
+        ld      e,a
 
-        ld      a,d             ; A = earlier key or $ff
-        inc     a               ; No second key?
-        ret     z               ; Just return
+        rlc     b               ; Next row
+        jp      m,.row_loop     ; Do all the rest of the rows, except the last
 
-        ; Test for caps shift ($27)
-        cp      $28             ; Remember, A was just increased so we test against keycode + 1
-        ret     z
+        ; Last row contains SYM shift
+        in      a,(c)
+        or      %11100010       ; Disable sym-shift
+        cp      h
+        ld      c,a
+        jr      nz,.keyhit_1    ; Jump if key pressed
 
-        ; Test for sym shift
-        cp      $19
-        ret     z
+        xor     a
+        ld      h,a
+        ld      l,a             ; ASCII 0, CF = 0
+        ret
 
-        ; Test for sym shift being the most recent key (as it could be stored after 2nd pair)
-        ld      a,e             ; A = possible sym shift
-        ld      e,d             ; E = other key
-        ld      d,a             ; D = possible sym shift
-        cp      $18             ; Is sym shift?
-        ret                     ; ZF = 0 if neither key is shift
+.keyhit_0:
+        ; At least one row is active (ignoring shift keys)
+        ; Make sure no other are active
+        ;
+        ld      c,a             ; C = key result
+
+        ; B = key row containing keypress
+        ; E = index into key translation table for row
+        ; HL = $ffe0
+        ; D = 5
+
+        ld      a,b
+        cpl                     ; A has bit which represents row
+        or      $81             ; Ignore first and last rows (that contain shift keys)
+        in      a,($fe)         ; Look at all the other rows
+        or      l
+        cp      h               ; Any other keys pressed?
+        jp      nz,.error       ; More than one key (other than shift key) is pressed
+        ld      a,$7f
+        in      a,($fe)         ; Read SYM shift row
+        or      %11100010       ; Ignore sym shift
+        cp      h
+        jp      nz,.error       ; Another key was pressed
+
+.keyhit_1:
+        ; Only one key row is active.  Determine ASCII code from translation table
+
+        ; C = key result
+        ; E = index into key translation table for row
+        ; D = 5
+
+        ld      b,0
+        ld      hl,rowtable - $e0
+        add     hl,bc
+        ld      a,(hl)          ; One key press will be converted to 0-4
+        cp      d
+        jp      nc,.error       ; More than one key pressed!
+        add     a,e
+        ld      e,a             ; E = index into key translation table for key
+        ld      hl,KeyTrans
+        ld      d,b             ; D = 0
+        add     hl,de
+
+        ; Check shift modifiers
+        ld      a,$fe
+        in      a,($fe)
+        and     1
+        jr      nz,.check_sym   ; Caps-shift pressed
+        ld      e,40
+        add     hl,de           ; Look at the 2nd lot of mappings
+
+.check_sym:
+        ld      a,$7f
+        in      a,($fe)
+        and     2               ; Extract sym-shift
+        jr      nz,.ascii       ; Not pressed
+        ld      e,80
+        add     hl,de           ; Look at 3rd or 4th lot of mappings
+
+.ascii:
+        ld      l,(hl)          ; L = ascii code
+        ld      h,b             ; H = 0
+        ret
+
+RowTable:
+        ;       11110 = 0
+        ;       11101 = 1
+        ;       11011 = 2
+        ;       10111 = 3
+        ;       01111 = 4
+        ;       
+        db      $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff     ; 00xxx
+        db      $ff,$ff,$ff,$ff,$ff,$ff,$ff,$04     ; 01xxx
+        db      $ff,$ff,$ff,$ff,$ff,$ff,$ff,$03     ; 10xxx
+        db      $ff,$ff,$ff,$02,$ff,$01,$00,$ff     ; 11xxx
+
+KeyTrans:
+        ; Unshifted
+        db      255,'z','x','c','v'
+        db      'a','s','d','f','g'
+        db      'q','w','e','r','t'
+        db      '1','2','3','4','5'
+        db      '0','9','8','7','6'
+        db      'p','o','i','u','y'
+        db       13,'l','k','j','h'
+        db      ' ',255,'m','n','b'
+
+        ; CAPS shifted
+        db      255,'Z','X','C','V'
+        db      'A','S','D','F','G'
+        db      'Q','W','E','R','T'
+        db      '1','2','3','4','5'
+        db      '0','9','8','7','6'
+        db      'P','O','I','U','Y'
+        db       13,'L','K','J','H'
+        db      ' ',255,'M','N','B'
 
 
 ;;----------------------------------------------------------------------------------------------------------------------
