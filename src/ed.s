@@ -245,6 +245,26 @@ Print:
 .finish inc     de
         ret
 
+PrintChar:
+        ; Input:
+        ;   B = Y coord (0-31)
+        ;   C = X coord (0-79)
+        ;   D = Colour (0-15)
+        ;   E = character
+        ; Output:
+        ;   HL = Tilemap address of following position
+        ; Destroys:
+        ;   BC, A
+        call    CalcTileAddress
+        ld      a,e
+        ld      (hl),a
+        inc     hl
+        ld      a,d
+        swapnib
+        ld      (hl),a
+        inc     hl
+        ret
+
 WriteSpace:
         ; Draw a rectangular area of spaces
         ; Input
@@ -455,6 +475,72 @@ DisplayScreen:
         djnz    .l1
         ret
 
+;;----------------------------------------------------------------------------------------------------------------------
+;; Keyboard routines
+;; Lifted and adapated from the ROM
+
+; Scans the keyboard and returns button code
+;
+; Output:
+;   D =
+;   E = button code of pressed key (0-39) or $ff if no key is pressed
+;   A = button code of pressed key (0-39) or $ff if no key is pressed
+;   ZF = 0 if nore than two keys are pressed or neither pair of keys is a shift (i.e. invalid)
+
+KeyScan:
+        ld      l,$2f           ; Initial preset value
+        ld      de,$ffff        ; DE = no key, 2 key cache
+        ld      bc,$fefe        ; B = row address, C = port address
+
+.key_line:
+        in      a,(c)           ; Read from the keyboard port
+        cpl                     ; Make 1 = key down
+        and     $1f             ; We only care about the lower 5 bits (since 5 keys per line)
+        jr      z,.no_key       ; No keys being pressed?
+
+        ld      h,a             ; H = key state of the 5 keys in this line
+        ld      a,l
+.three_keys:
+        inc     d
+        ret     nz              ; More than 1 non-shift key pressed?
+
+.key_bits:
+        ; Possible values on first row:
+        ;   27, 1f, 17, 0f, 07
+        ; Possible values on second row:
+        ;   26, 1e, 26, 0e, 06
+        ; 
+        ; and so on...
+        sub     8               ; Continuously subtract 8 from the preset value until a key bit is found
+        srl     h
+        jr      nc,.key_bits
+        ld      d,e             ; Copy an earlier key value to the D register
+        ld      e,a             ; E = new key value
+        jr      nz,.key_bits    ; If there are more keys, then jump back
+
+.no_key:
+        dec     l               ; Next initial preset value for next row
+        rlc     b               ; Next line
+        jr      c,.key_line     ; The one 0 bit will roll off the end when all 8 rows are done.  If not, CF is set.
+
+        ld      a,d             ; A = earlier key or $ff
+        inc     a               ; No second key?
+        ret     z               ; Just return
+
+        ; Test for caps shift ($27)
+        cp      $28             ; Remember, A was just increased so we test against keycode + 1
+        ret     z
+
+        ; Test for sym shift
+        cp      $19
+        ret     z
+
+        ; Test for sym shift being the most recent key (as it could be stored after 2nd pair)
+        ld      a,e             ; A = possible sym shift
+        ld      e,d             ; E = other key
+        ld      d,a             ; D = possible sym shift
+        cp      $18             ; Is sym shift?
+        ret                     ; ZF = 0 if neither key is shift
 
 
 ;;----------------------------------------------------------------------------------------------------------------------
@@ -462,10 +548,19 @@ DisplayScreen:
 ;; The main loop
 
 Main:
-        call    DisplayScreen
+        ;call    DisplayScreen
+        call    KeyScan
+        inc     e
+        jr      z,Main
+
+        dec     e
+        ld      b,0
+        ld      c,e
+        ld      de,$0031
+        call    PrintChar
 
 EndForever:
-        jp      EndForever
+        jp      Main
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------------------------------------------
