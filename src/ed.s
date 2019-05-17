@@ -116,20 +116,35 @@ Initialise:
 ;; The main loop
 
 Main:
-        call    DisplayScreen
+        ;call    DisplayScreen
 
         ld      bc,0
 
-.l1     push    bc
-        call    KeyScan
+.l1     call    Inkey
+        jr      nc,.l1
+
+        cp      $0a
+        jr      nz,.no_delete
+        dec     c
+        jr      nc,.no_wrap
+        ld      c,79
+        dec     b
+        jr      nc,.no_wrap
+        ld      bc,0
+        jr      .l1
+        
+.no_wrap
+        ld      d,0
+        ld      e,' '
+        push    bc
+        call    PrintChar
         pop     bc
-        jr      c,.l1
-        ld      a,l
-        cp      h
-        jr      z,.l1
+        jr      .l1
+
+.no_delete
 
         ld      d,0
-        ld      e,l
+        ld      e,a
         push    bc
         call    PrintChar
         pop     bc

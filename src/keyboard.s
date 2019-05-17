@@ -214,3 +214,39 @@ KeyTrans:
         db      $0d,    'l'+$80,'k'+$80,'j'+$80,'h'+$80
         db      ' ',    $ff,    'm'+$80,'n'+$80,'b'+$80
 
+;;----------------------------------------------------------------------------------------------------------------------
+;; Inkey
+;; Uses the KeyScan routine to get raw input but ensures that a button is released before the next one is registerd
+
+LastKey db      0
+
+Inkey:
+        ; Output:
+        ;       A = ASCII character or 0 if no key pressed/error
+        ;       CF = Key pressed
+        push    hl
+        push    de
+        push    bc
+        call    KeyScan
+        jr      c,.no_key               ; Error occurred!
+        ld      a,l
+        cp      h                       ; Key pressed?
+        jr      z,.no_key               ; Nope!
+        ld      a,(LastKey)
+        cp      l                       ; Same as last key?
+        jr      z,.same_key
+
+        ; New key pressed
+        ld      a,l
+        scf
+        jr      .set_key
+
+.no_key:
+        xor     a
+.set_key:
+        ld     (LastKey),a
+.same_key:
+        pop     bc
+        pop     de
+        pop     hl
+        ret
