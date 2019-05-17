@@ -55,10 +55,13 @@ EOF     equ     $1a
 
 textlen equ * - $c000
 
+
+;;----------------------------------------------------------------------------------------------------------------------
+
+        org     $8000
+
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Editor state
-
-        org     $6000
 
 ; Presentation state
 top             dw      0           ; Offset of character shown at start of top line
@@ -75,8 +78,6 @@ gapend          dw      0           ; Offset into buffer of gap end
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Start
-
-        org     $8000
 
 Start:
         ld      sp,$c000
@@ -112,51 +113,95 @@ Initialise:
         include "src/keyboard.s"
 
 ;;----------------------------------------------------------------------------------------------------------------------
+;; New Keyboard routines
+
+PKeys:  dw      1           ; Current buffer offset into Keys
+Keys:   ds      16          ; Double-buffered space to store the key presses
+Edges:  ds      8
+
+KeyScan2:
+        ; Output:
+        ;   HL = pointer to keyscan
+        ; Destroys
+        ;   BC, DE, A
+
+        ; Toggle the pointer
+        ld      hl,(PKeys)
+        ld      a,l
+        xor     1
+        ld      l,a
+        ld      (PKeys),hl
+        ld      de,Keys
+        add     hl,de       ; HL = Key buffer
+
+        ; Scan the keyboard
+        ld      bc,$fdfe    ; Keyboard ports (start here to make sure shift rows are last)
+        push    hl
+        ld      e,8         ; Checksum to know when to end loop
+
+.l1     in      a,(c)
+        cpl
+        and     $1f
+        ld      (hl),a
+        inc     hl
+        inc     hl
+        rlc     b
+        dec     e
+        jr      nz,.l1
+        pop     hl          ; Restore pointer to buffer
+
+
+
+        ret
+
+DisplayKeys:
+        ; Input
+        ;   HL = Keyboard state
+        ld      bc,0
+        ld      e,8
+
+.l1     ld      a,(hl)
+        inc     hl
+        inc     hl
+        push    hl
+        ld      l,5
+.l2     srl     a
+        ld      d,a
+        push    de          ; Save outer loop counter
+        jr      c,.pressed
+        ld      de,$0000
+        jr      .cont
+.pressed
+        ld      de,$0100
+.cont   push    bc          ; Save coords
+        push    hl          ; Save inner loop counter
+        call    PrintChar
+        pop     hl
+        pop     bc
+        pop     de
+        ld      a,d
+        inc     c
+        dec     l
+        jr      nz,.l2
+        pop     hl
+        ld      c,0
+        inc     b
+        dec     e
+        jr      nz,.l1
+        ret
+
+;;----------------------------------------------------------------------------------------------------------------------
 ;; Main
 ;; The main loop
 
 Main:
         ;call    DisplayScreen
 
-        ld      bc,0
+;        call    ClearScreen
+        call    KeyScan2
+        call    DisplayKeys
 
-.l1     call    Inkey
-        jr      nc,.l1
-
-        cp      $0a
-        jr      nz,.no_delete
-        dec     c
-        jr      nc,.no_wrap
-        ld      c,79
-        dec     b
-        jr      nc,.no_wrap
-        ld      bc,0
-        jr      .l1
-        
-.no_wrap
-        ld      d,0
-        ld      e,' '
-        push    bc
-        call    PrintChar
-        pop     bc
-        jr      .l1
-
-.no_delete
-
-        ld      d,0
-        ld      e,a
-        push    bc
-        call    PrintChar
-        pop     bc
-        inc     c
-        ld      a,c
-        cp      80
-        jr      nz,.l1
-        ld      c,0
-        inc     b
-        jr      .l1
-
-
+        jr      Main
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------------------------------------------
