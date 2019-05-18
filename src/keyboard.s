@@ -52,126 +52,156 @@
 ;   B0-B9 - Ext+Number
 ;   E1-FA - Ext+Letter
 
+Keys:           ds      16      ; Double-buffered interleaved space to store the key presses
+                                ; NEW OLD NEW OLD NEW OLD...
+                                ; Thought about having a dynamic pointer to switch buffers but it turns out
+                                ; that having fixed buffers makes things easier later on
+
 KeyScan:
-        ld      bc,$fefe        ; First keyboard port
-        ld      de,$0500        ; E = offset into key translation table
-        ld      hl,$ffe0        ; Constants used in loop
+                ; Output:
+                ;   HL = pointer to keyscan
+                ; Destroys
+                ;   BC, DE, A
 
-        ; First row contains Caps-Shift
-        in      a,(c)           ; Read first row
-        or      %11100001       ; Disable the CAPS-Shift
-        cp      h
-        jr      nz,.keyhit_0    ; Key is pressed in this row
+                ld      hl,Keys
 
-        ld      e,d
-        rlc     b
+                ; Scan the keyboard
+                ld      bc,$fdfe        ; Keyboard ports (start here to make sure shift rows are last)
+                push    hl
+                ld      e,8             ; Checksum to know when to end loop
 
-.row_loop:
-        in      a,(c)           ; Read keys
-        or      l               ; Complete the 8 bits
-        cp      h               ; Key pressed?
-        jr      nz,.keyhit_0    ; Yes, jump
+.l1             ld      d,(hl)          ; Get old state
+                in      a,(c)
+                cpl
+                and     $1f
+                ld      (hl),a          ; Store new state
+                inc     hl
+                ld      (hl),d          ; Store old state
+                inc     hl
+                rlc     b
+                dec     e
+                jr      nz,.l1
+                pop     hl          ; Restore pointer to buffer
+                ret
 
-        ld      a,e
-        add     a,d
-        ld      e,a
+DisplayKeys:
+                ; Input
+                ;   HL = Keyboard state
+                ld      bc,0
+                ld      e,8
 
-        rlc     b               ; Next row
-        jp      m,.row_loop     ; Do all the rest of the rows, except the last
+.l1             ld      a,(hl)
+                inc     hl
+                inc     hl
+                push    hl
+                ld      l,5
+.l2             srl     a
+                ld      d,a
+                push    de          ; Save outer loop counter
+                jr      c,.pressed
+                ld      de,$0000
+                jr      .cont
+.pressed
+                ld      de,$0100
+.cont           push    bc          ; Save coords
+                push    hl          ; Save inner loop counter
+                call    PrintChar
+                pop     hl
+                pop     bc
+                pop     de
+                ld      a,d
+                inc     c
+                dec     l
+                jr      nz,.l2
+                pop     hl
+                ld      c,0
+                inc     b
+                dec     e
+                jr      nz,.l1
+                ret
 
-        ; Last row contains SYM shift
-        in      a,(c)
-        or      %11100010       ; Disable sym-shift
-        cp      h
-        ld      c,a
-        jr      nz,.keyhit_1    ; Jump if key pressed
+;;----------------------------------------------------------------------------------------------------------------------
 
-        xor     a
-        ld      h,a
-        ld      l,a             ; ASCII 0, CF = 0
-        ret
+Key:            db      0               ; Latest ASCII character
+KFlags:         db      0               ; Bit 0 = character available, reset when test
 
-.keyhit_0:
-        ; At least one row is active (ignoring shift keys)
-        ; Make sure no other are active
-        ;
-        ld      c,a             ; C = key result
+ImRoutine:
+                push    af
+                push    bc
+                push    de
+                push    hl
+                push    ix
+                call    KeyScan         ; HL = Keyboard table
 
-        ; B = key row containing keypress
-        ; E = index into key translation table for row
-        ; HL = $ffe0
-        ; D = 5
+                ; Update shift statuses
+                push    hl
+                pop     ix
+                xor     a
+                bit     0,(ix+14)       ; Test for Caps (row 7 * 2 bytes)
+                jr      z,.no_caps
+                or      40
+.no_caps        bit     1,(ix+12)       ; Test for symbol shift (row 6 * 2 bytes)
+                jr      z,.no_sym
+                or      80
+.no_sym         ex      de,hl           ; DE = keyboard snapshot
+                add     hl,KeyTrans
+                add     hl,a            ; HL = Key translation table
 
-        ld      a,b
-        cpl                     ; A has bit which represents row
-        or      $81             ; Ignore first and last rows (that contain shift keys)
-        in      a,($fe)         ; Look at all the other rows
-        or      l
-        cp      h               ; Any other keys pressed?
-        jp      nz,.error       ; More than one key (other than shift key) is pressed
-        ld      a,$7f
-        in      a,($fe)         ; Read SYM shift row
-        or      %11100010       ; Ignore sym shift
-        cp      h
-        jr      z,.keyhit_1
-.error:
-        xor     a
-        ld      h,a
-        ld      l,a
-        scf
-        ret
+.cont:
+                ; Now we scan our keyboard snapshot, and any keys that are detected to be pressed are added to
+                ; the circular buffer
+                ld      b,8
+.row            ld      a,(de)          ; A = keyboard state for current row
+                inc     de
+                ld      c,a             ; C = keyboard state for current row
+                ld      a,(de)          ; A = last keyboard state
+                inc     de
+                xor     $ff
+                and     c               ; A = edge detected key state (!A + C)
+                push    hl              ; Store the current key translation table position
 
-.keyhit_1:
-        ; Only one key row is active.  Determine ASCII code from translation table
+.col            and     a               ; Any keys pressed on entire row?
+                jr      z,.end_row
 
-        ; C = key result
-        ; E = index into key translation table for row
-        ; D = 5
+                srl     a               ; Key pressed?
+                jr      nc,.not_pressed
 
-        ld      b,0
-        ld      hl,rowtable - $e0
-        add     hl,bc
-        ld      a,(hl)          ; One key press will be converted to 0-4
-        cp      d
-        jp      nc,.error       ; More than one key pressed!
-        add     a,e
-        ld      e,a             ; E = index into key translation table for key
-        ld      hl,KeyTrans
-        ld      d,b             ; D = 0
-        add     hl,de
+                ld      c,(hl)          ; C = ASCII character
+                inc     c               ; C == $ff?
+                jr      z,.ignore
+                dec     c
+                call    BufferInsert    ; Insert into circular buffer
+.ignore         inc     hl              ; Next entry into table
+                jr      .col
 
-        ; Check shift modifiers
-        ld      a,$fe
-        in      a,($fe)
-        and     1
-        jr      nz,.check_sym   ; Caps-shift pressed
-        ld      e,40
-        add     hl,de           ; Look at the 2nd lot of mappings
+.end_row        ld      a,5
+                pop     hl
+                add     hl,n            ; Next row of table
+                djnz    .row
 
-.check_sym:
-        ld      a,$7f
-        in      a,($fe)
-        and     2               ; Extract sym-shift
-        jr      nz,.ascii       ; Not pressed
-        ld      e,80
-        add     hl,de           ; Look at 3rd or 4th lot of mappings
+                ; Fetch a character
+                ld      hl,KFlags
+                bit     0,(hl)
+                jr      nz,.finish      ; Still haven't processed last key yet
 
-.ascii:
-        ld      l,(hl)          ; L = ascii code
-        ld      h,b             ; H = 0
-        ret
+                call    BufferRead
+                jr      z,.no_chars
+                ld      (Key),a         ; Next key available
+                set     0,(hl)          ; Key ready!
+                jr      .finish
 
-RowTable:
-        ;       11110 = 0
-        ;       11101 = 1
-        ;       11011 = 2
-        ;       10111 = 3
-        ;       01111 = 4
-        ;       
-        db      $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff     ; 00xxx
-        db      $ff,$ff,$ff,$ff,$ff,$ff,$ff,$04     ; 01xxx
-        db      $ff,$ff,$ff,$ff,$ff,$ff,$ff,$03     ; 10xxx
-        db      $ff,$ff,$ff,$02,$ff,$01,$00,$ff     ; 11xxx
+.no_chars       xor     a
+                ld      (Key),a
+
+.finish
+                pop     ix
+                pop     hl
+                pop     de
+                pop     bc
+                pop     af
+                reti
+
+;;----------------------------------------------------------------------------------------------------------------------
 
 KeyTrans:
         ; Unshifted
