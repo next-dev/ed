@@ -7,6 +7,22 @@
 ;;
 ;;----------------------------------------------------------------------------------------------------------------------
 
+                org     $7f00
+
+                ds      257,$80         ; Interrupt vector table
+
+InitKeys:
+                di
+                ld      a,$7f
+                ld      i,a
+                im      2
+                ei
+                ret
+
+DoneKeys:       di
+                im      1
+                ei
+                ret
 
 ; Scans the keyboard and returns button code
 ;
@@ -52,6 +68,86 @@
 ;   B0-B9 - Ext+Number
 ;   E1-FA - Ext+Letter
 
+                org     $8080
+
+ImRoutine:
+                di
+                push    af
+                push    bc
+                push    de
+                push    hl
+                push    ix
+                call    KeyScan         ; HL = Keyboard table
+
+                ; Update shift statuses
+                push    hl
+                pop     ix
+                xor     a
+                bit     0,(ix+14)       ; Test for Caps (row 7 * 2 bytes)
+                jr      z,.no_caps
+                or      40
+.no_caps        bit     1,(ix+12)       ; Test for symbol shift (row 6 * 2 bytes)
+                jr      z,.no_sym
+                or      80
+.no_sym         ex      de,hl           ; DE = keyboard snapshot
+                ld      hl,KeyTrans
+                add     hl,a            ; HL = Key translation table
+
+.cont:
+                ; Now we scan our keyboard snapshot, and any keys that are detected to be pressed are added to
+                ; the circular buffer
+                ld      b,8
+.row            ld      a,(de)          ; A = keyboard state for current row
+                inc     de
+                ld      c,a             ; C = keyboard state for current row
+                ld      a,(de)          ; A = last keyboard state
+                inc     de
+                xor     $ff
+                and     c               ; A = edge detected key state (!A + C)
+                push    hl              ; Store the current key translation table position
+
+.col            and     a               ; Any keys pressed on entire row?
+                jr      z,.end_row
+
+                srl     a               ; Key pressed?
+                jr      nc,.ignore
+
+                ld      c,(hl)          ; C = ASCII character
+                inc     c               ; C == $ff?
+                jr      z,.ignore
+                dec     c
+                call    BufferInsert    ; Insert into circular buffer
+.ignore         inc     hl              ; Next entry into table
+                jr      .col
+
+.end_row        ld      a,5
+                pop     hl
+                add     hl,a            ; Next row of table
+                djnz    .row
+
+                ; Fetch a character
+                ld      hl,KFlags
+                bit     0,(hl)
+                jr      nz,.finish      ; Still haven't processed last key yet
+
+                call    BufferRead
+                jr      z,.no_chars
+                ld      (Key),a         ; Next key available
+                set     0,(hl)          ; Key ready!
+                jr      .finish
+
+.no_chars       xor     a
+                ld      (Key),a
+
+.finish
+                pop     ix
+                pop     hl
+                pop     de
+                pop     bc
+                pop     af
+                ei
+                reti
+
 Keys:           ds      16      ; Double-buffered interleaved space to store the key presses
                                 ; NEW OLD NEW OLD NEW OLD...
                                 ; Thought about having a dynamic pointer to switch buffers but it turns out
@@ -84,128 +180,15 @@ KeyScan:
                 pop     hl          ; Restore pointer to buffer
                 ret
 
-DisplayKeys:
-                ; Input
-                ;   HL = Keyboard state
-                ld      bc,0
-                ld      e,8
-
-.l1             ld      a,(hl)
-                inc     hl
-                inc     hl
-                push    hl
-                ld      l,5
-.l2             srl     a
-                ld      d,a
-                push    de          ; Save outer loop counter
-                jr      c,.pressed
-                ld      de,$0000
-                jr      .cont
-.pressed
-                ld      de,$0100
-.cont           push    bc          ; Save coords
-                push    hl          ; Save inner loop counter
-                call    PrintChar
-                pop     hl
-                pop     bc
-                pop     de
-                ld      a,d
-                inc     c
-                dec     l
-                jr      nz,.l2
-                pop     hl
-                ld      c,0
-                inc     b
-                dec     e
-                jr      nz,.l1
-                ret
-
 ;;----------------------------------------------------------------------------------------------------------------------
 
 Key:            db      0               ; Latest ASCII character
 KFlags:         db      0               ; Bit 0 = character available, reset when test
 
-ImRoutine:
-                push    af
-                push    bc
-                push    de
-                push    hl
-                push    ix
-                call    KeyScan         ; HL = Keyboard table
-
-                ; Update shift statuses
-                push    hl
-                pop     ix
-                xor     a
-                bit     0,(ix+14)       ; Test for Caps (row 7 * 2 bytes)
-                jr      z,.no_caps
-                or      40
-.no_caps        bit     1,(ix+12)       ; Test for symbol shift (row 6 * 2 bytes)
-                jr      z,.no_sym
-                or      80
-.no_sym         ex      de,hl           ; DE = keyboard snapshot
-                add     hl,KeyTrans
-                add     hl,a            ; HL = Key translation table
-
-.cont:
-                ; Now we scan our keyboard snapshot, and any keys that are detected to be pressed are added to
-                ; the circular buffer
-                ld      b,8
-.row            ld      a,(de)          ; A = keyboard state for current row
-                inc     de
-                ld      c,a             ; C = keyboard state for current row
-                ld      a,(de)          ; A = last keyboard state
-                inc     de
-                xor     $ff
-                and     c               ; A = edge detected key state (!A + C)
-                push    hl              ; Store the current key translation table position
-
-.col            and     a               ; Any keys pressed on entire row?
-                jr      z,.end_row
-
-                srl     a               ; Key pressed?
-                jr      nc,.not_pressed
-
-                ld      c,(hl)          ; C = ASCII character
-                inc     c               ; C == $ff?
-                jr      z,.ignore
-                dec     c
-                call    BufferInsert    ; Insert into circular buffer
-.ignore         inc     hl              ; Next entry into table
-                jr      .col
-
-.end_row        ld      a,5
-                pop     hl
-                add     hl,n            ; Next row of table
-                djnz    .row
-
-                ; Fetch a character
-                ld      hl,KFlags
-                bit     0,(hl)
-                jr      nz,.finish      ; Still haven't processed last key yet
-
-                call    BufferRead
-                jr      z,.no_chars
-                ld      (Key),a         ; Next key available
-                set     0,(hl)          ; Key ready!
-                jr      .finish
-
-.no_chars       xor     a
-                ld      (Key),a
-
-.finish
-                pop     ix
-                pop     hl
-                pop     de
-                pop     bc
-                pop     af
-                reti
-
 ;;----------------------------------------------------------------------------------------------------------------------
 
 KeyTrans:
         ; Unshifted
-        db      $ff,'z','x','c','v'
         db      'a','s','d','f','g'
         db      'q','w','e','r','t'
         db      '1','2','3','4','5'
@@ -213,9 +196,9 @@ KeyTrans:
         db      'p','o','i','u','y'
         db      $0d,'l','k','j','h'
         db      ' ',$ff,'m','n','b'
+        db      $ff,'z','x','c','v'
 
         ; CAPS shifted
-        db      $ff,'Z','X','C','V'
         db      'A','S','D','F','G'
         db      'Q','W','E','R','T'
         db      $01,$02,$03,$04,$05
@@ -223,9 +206,9 @@ KeyTrans:
         db      'P','O','I','U','Y'
         db      $1d,'L','K','J','H'
         db      $1b,$ff,'M','N','B'
+        db      $ff,'Z','X','C','V'
 
         ; SYM shifted
-        db      $ff,':','`','?','/'
         db      '~','|','\','{','}'
         db      $7f,'w','e','<','>'
         db      '!','@','#','$','%'
@@ -233,9 +216,9 @@ KeyTrans:
         db      $22,';','i',']','['
         db      $1e,'=','+','-','^'
         db      $1c,$ff,'.',',','*'
+        db      $ff,':','`','?','/'
 
         ; EXT shifted
-        db      $ff,    'z'+$80,'x'+$80,'c'+$80,'v'+$80
         db      'a'+$80,'s'+$80,'d'+$80,'f'+$80,'g'+$80
         db      'q'+$80,'w'+$80,'e'+$80,'r'+$80,'t'+$80
         db      '1'+$80,'2'+$80,'3'+$80,'4'+$80,'5'+$80
@@ -243,40 +226,5 @@ KeyTrans:
         db      'p'+$80,'o'+$80,'i'+$80,'u'+$80,'y'+$80
         db      $0d,    'l'+$80,'k'+$80,'j'+$80,'h'+$80
         db      ' ',    $ff,    'm'+$80,'n'+$80,'b'+$80
+        db      $ff,    'z'+$80,'x'+$80,'c'+$80,'v'+$80
 
-;;----------------------------------------------------------------------------------------------------------------------
-;; Inkey
-;; Uses the KeyScan routine to get raw input but ensures that a button is released before the next one is registerd
-
-LastKey db      0
-
-Inkey:
-        ; Output:
-        ;       A = ASCII character or 0 if no key pressed/error
-        ;       CF = Key pressed
-        push    hl
-        push    de
-        push    bc
-        call    KeyScan
-        jr      c,.no_key               ; Error occurred!
-        ld      a,l
-        cp      h                       ; Key pressed?
-        jr      z,.no_key               ; Nope!
-        ld      a,(LastKey)
-        cp      l                       ; Same as last key?
-        jr      z,.same_key
-
-        ; New key pressed
-        ld      a,l
-        scf
-        jr      .set_key
-
-.no_key:
-        xor     a
-.set_key:
-        ld     (LastKey),a
-.same_key:
-        pop     bc
-        pop     de
-        pop     hl
-        ret

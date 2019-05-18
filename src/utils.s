@@ -19,7 +19,7 @@ VirtToReal:
 ;; Circular buffer - uses the print buffer at $5b00
 
 PRead   db      0       ; Offset in buffer of read point (should be <= PWrite)
-PWrite  db      0       ; Offset in buffer of write point
+PWrite  db      1       ; Offset in buffer of write point
 
 ; Empty buffer:
 ;
@@ -52,7 +52,8 @@ BufferInsert:
 
                 push    hl
                 ld      l,(hl)
-                ld      h,(BufferPage)  ; DE = write address
+                ld      a,(BufferPage)  ; DE = write address
+                ld      h,a
                 ld      (hl),c          ; write value in buffer
                 pop     hl
                 inc     (hl)
@@ -64,20 +65,19 @@ BufferRead:     ; Output
                 ;       A = Value
                 ;       ZF = 1 if nothing to read
                 push    hl
-                push    de
                 ld      a,(PWrite)
                 dec     a
                 ld      hl,PRead
                 cp      (hl)            ; Buffer is empty?
-                ret     z
+                jr      z,.finish
 
-                inc     (hl)
-                ld      e,(hl)
-                ld      d,(BufferPage)
+                inc     (hl)            ; Advance read pointer
+                ld      l,(hl)
+                ld      a,(BufferPage)
+                ld      h,a             ; HL = buffer pointer
                 ld      a,(hl)          ; Read data
                 and     a               ; Clear ZF
-                pop     hl
-                pop     de
+.finish         pop     hl
                 ret
 
 

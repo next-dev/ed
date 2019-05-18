@@ -6,7 +6,7 @@ opt     sna=Start:$7fff
 opt     zxnext
 opt     zxnextreg
 
-BREAK   macro
+BR      macro
         dw      $01dd
         endm
 
@@ -61,10 +61,9 @@ textlen equ * - $c000
 
 
 ;;----------------------------------------------------------------------------------------------------------------------
+;; This ORGs at $7fff
 
-        org     $7fff
-
-        dw      ImRoutine
+        include "src/keyboard.s"
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Editor state
@@ -98,12 +97,8 @@ Start:
                 ld      a,$ff
                 ld      ($5c00),a        
                 ld      ($5c04),a
-                di
-                ld      a,$7f
-                ld      i,a
-                im      2
-                ei
                 call    Initialise
+                call    InitKeys
                 jp      Main
 
 ;;----------------------------------------------------------------------------------------------------------------------
@@ -120,19 +115,40 @@ Initialise:
         include "src/screen.s"
         include "src/utils.s"
         include "src/display.s"
-        include "src/keyboard.s"
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Main
 ;; The main loop
 
 Main:
-        ;call    DisplayScreen
+                ld      bc,0
 
-;        call    ClearScreen
-        call    DisplayKeys
+.l1
+                ; Read a key
+                ld      hl,KFlags
+                bit     0,(hl)
+                jr      z,.l1
+                res     0,(hl)
 
-        jr      Main
+                push    bc
+                ld      a,(Key)
+                res     0,(hl)
+                ld      e,a
+                ld      d,0
+                call    PrintChar
+                pop     bc
+
+                inc     c
+                ld      a,c
+                cp      80
+                jr      nz,.l1
+                inc     b
+                ld      c,0
+                cp      32
+                jr      nz,.l1
+                ld      b,c
+
+                jr      .l1
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------------------------------------------
