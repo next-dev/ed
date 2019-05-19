@@ -158,7 +158,6 @@ DisplayCursor:
                 ld      e,a                     ; E = cursor colour
         
         ; Let's find out the actual colour of the cursor based on the frame counter
-                br
                 ld      a,(Counter)
                 and     64
                 jr      z,.cursor_appears
