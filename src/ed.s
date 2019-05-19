@@ -14,23 +14,13 @@ EXIT    macro
         dw      $00dd
         endm
 
-;;
-;; Spectrum ROM system variables
-;;
-
-LASTK   equ     $5c08
-REPDEL  equ     $5c09
-REPPER  equ     $5c0a
-FLAGS   equ     $5c3b
-MODE    equ     $5c41
-
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Constants
 ;;
 
 EOL             equ     $0d
 EOF             equ     $1a
-CMDBUFFER       equ     $be
+CMDBUFFER       equ     $bd
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Memory map
@@ -41,8 +31,9 @@ CMDBUFFER       equ     $be
 ; $5b00         256 circular buffer
 ; $6000         Tiles
 ; $7fff         Code
-; $be00         Commandbuffer
-; $bf00         Keyboard buffer
+; $bd00         Commandbuffer
+; $be00         Keyboard buffer
+; $bf00         Stack
 ; $c000         Data
 
 ;;----------------------------------------------------------------------------------------------------------------------
@@ -69,37 +60,17 @@ textlen equ * - $c000
         include "src/keyboard.s"
 
 ;;----------------------------------------------------------------------------------------------------------------------
-;; Editor state
 
-; Presentation state
-top             dw      0           ; Offset of character shown at start of top line
-dx              dw      0           ; Indent
-mark            dw      0           ; Virtual offset into doc where cursor is
-cursorX         db      0           ; Screen X coord of cursor
-cursorY         db      1           ; Screen Y coord of cursor
-cursorLine      dw      0           ; Line which cursor resides
-
-; Buffer state
-gapstart        dw      0           ; Offset into buffer of gap start
-gapend          dw      0           ; Offset into buffer of gap end
-
+MODE_NORMAL     equ     0
+MODE_INSERT     equ     1
+MODE_SELECT     equ     2
+MODE_LINESELECT equ     3
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Start
 
 Start:
                 ld      sp,$c000
-
-                ; Initialise system variables
-                ld      hl,FLAGS
-                set     3,(hl)
-                ld      a,35
-                ld      (REPDEL),a
-                ld      a,5
-                ld      (REPPER),a
-                ld      a,$ff
-                ld      ($5c00),a        
-                ld      ($5c04),a
                 call    Initialise
                 call    InitKeys
                 jp      Main
@@ -115,9 +86,11 @@ Initialise:
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Modules
 
-        include "src/screen.s"
         include "src/utils.s"
+        include "src/screen.s"
         include "src/display.s"
+        include "src/cmdtable.s"
+        include "src/state.s"
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Main
@@ -125,18 +98,339 @@ Initialise:
 
 Main:
                 call    ClearScreen
-
-MainLoop:
                 halt
                 call    DisplayScreen
+
+MainLoop:
                 ld      a,(cursorY)
                 ld      b,a
                 ld      a,(cursorX)
                 ld      c,a
                 ld      a,2
                 call    DisplayCursor
+                call    DisplayDebugger
+
+        ; Read keyboard and insert commands into the command buffer
+                ld      hl,KFlags
+                bit     0,(hl)
+                jr      z,MainLoop      ; Still waiting for a key
+                ld      a,(Key)
+                res     0,(hl)          ; Consume key
+                ld      e,a             ; E = key code
+                ld      c,a             ; C = key code
+
+
+                ld      hl,ModeTable
+                ld      a,(Mode)
+                add     a,a
+                add     hl,a
+                add     hl,a
+                ld      a,(hl)
+                inc     hl
+                ld      h,(hl)
+                ld      l,a             ; HL = mode table to look up
+
+                ld      a,e
+                add     hl,a
+                add     hl,a            ; HL = address of routine address
+
+                ld      a,(hl)
+                inc     hl
+                ld      h,(hl)
+                ld      l,a             ; HL = Routine to run
+                ld      b,CMDBUFFER
+                ld      ix,CmdBufferState
+                ld      a,c
+                call    CallHL          ; Run command (with A = key code)
+
+                call    FlushCommands   ; Interpret commands
 
                 jr      MainLoop
+
+;;----------------------------------------------------------------------------------------------------------------------
+;; Command control
+
+;;----------------------------------------------------------------------------------------------------------------------
+;;----------------------------------------------------------------------------------------------------------------------
+;; COMMANDS
+;;
+;; The command routine job is to insert a command into the command buffer for later flushing.  Three registers will help
+;; with that.  Firstly, B is already loaded with the CMDBUFFER value so that a call to BufferInsert will insert a value
+;; into the correct buffer.  Secondly, A (and C) are loaded with the key-code.  Finally, IX is set to the correct buffer
+;; state variables.
+;;
+;; Because of this, inserting BufferInsert into the command table will just insert the actual key-code into the command
+;; buffer if they are the same.  For example, the key 'h' for cursor left is also 'h' as a command.
+;;----------------------------------------------------------------------------------------------------------------------
+
+;;----------------------------------------------------------------------------------------------------------------------
+;; Cursor commands
+
+Cmd_CursorLeft:
+                ld      c,'h'
+                jp      BufferInsert
+
+Cmd_CursorRight:
+                ld      c,'l'
+                jp      BufferInsert
+
+Cmd_CursorUp:
+                ld      c,'k'
+                jp      BufferInsert
+
+Cmd_CursorDown:
+                ld      c,'j'
+                jp      BufferInsert
+
+;;----------------------------------------------------------------------------------------------------------------------
+;; Command interpreter
+
+FlushCommands:
+        ; Keep pulling commands off the buffer until done.  It's a simple state machine.
+        ;
+                ld      b,CMDBUFFER
+                ld      ix,CmdBufferState
+                call    BufferRead              ; A = next command
+                ret     z
+
+                sub     32
+                ld      hl,MainCmdTable
+                add     hl,a
+                add     hl,a
+                ld      a,(hl)
+                inc     hl
+                ld      h,(hl)
+                ld      l,a                     ; HL = Address of command implementor
+                call    CallHL
+
+                jr      FlushCommands
+
+;;----------------------------------------------------------------------------------------------------------------------
+;; Document access functions
+;; All access to the document must be via these functions so they can be refactored later.  For example, I would like
+;; to add virtual access and 24-bit file sizes.
+
+Doc_FetchChar:
+        ; Output
+        ;       A = character under cursor
+                push    hl
+                ld      hl,(pos)
+                call    VirtToReal
+                ld      a,(hl)
+                pop     hl
+                ret
+
+Doc_AtStartDoc:
+        ; Output
+        ;       ZF = 1 if at start of doc
+        ;
+                push    af
+                push    hl
+                ld      hl,(pos)
+                ld      a,h
+                or      l
+                pop     hl
+                pop     af
+                ret
+
+Doc_AtEndDoc:
+        ; Output
+        ;       ZF = 1 if at end of doc
+        ;
+                push    af
+                call    Doc_FetchChar
+                cp      EOF
+                pop     af
+                ret
+
+Doc_LineOffset:
+        ; Output
+        ;       HL = position in line
+        ;       ZF = 1 if at start of line
+        ;       CF = 0
+        ;
+                push    de
+                ld      hl,(linepos)
+                ex      de,hl           ; DE = start of line position
+                and     a
+                ld      hl,(pos)        ; HL = position in document
+                sbc     hl,de
+                pop     de
+                ret
+
+
+Doc_AtEndLine:
+        ; Output
+        ;       ZF = 1 if at end of line
+        ;       CF = 0
+        ;
+                push    af
+                call    Doc_FetchChar
+                cp      EOL
+                pop     af
+                ret
+
+Doc_MoveBack:
+        ; Will not move past start of document
+        ; Input
+        ;       DE = number of places to move
+        ;
+                push    de
+                push    hl
+                ld      hl,(pos)
+                and     a
+                sbc     hl,de
+                jr      nc,.ok          ; Jump if there was room to move back that amount
+                ld      hl,0
+                ld      (linepos),hl
+                ld      (pos),hl
+                ret
+
+.ok             call    VirtToReal
+                ld      e,l
+                ld      d,h             ; DE = new position
+                ld      hl,(pos)        ; HL = old address
+                call    VirtToReal
+
+                ; We need to update linepos and cursorLine.  So loop through the characters updating state
+                ; as we go
+.l1             and     a
+                sbc     hl,de
+                jr      z,.done         ; We've reached out end point
+                add     hl,de
+
+                dec     hl              ; Move back and test
+                ld      a,(hl)
+                cp      EOL
+                jr      nz,.l1
+
+                inc     hl
+                ld      (linepos),hl    ; Update new linepos
+                dec     hl
+                push    hl
+                ld      hl,(cursorLine)
+                dec     hl
+                ld      (cursorLine),hl
+                pop     hl
+                jr      .l1
+
+
+.done           add     hl,de
+                call    RealToVirt
+                ld      (pos),hl
+                pop     hl
+                pop     de
+                ret
+                
+Doc_MoveForward:
+        ; Will not move past end of document
+        ; Input
+        ;       DE = number of places to move
+        ;
+                push    de
+                push    hl
+                ld      hl,(pos)
+                call    VirtToReal
+
+.l1             ld      a,(hl)
+                cp      EOF
+                jr      z,.done
+                cp      EOL
+                jr      nz,.no_eol
+
+                push    hl
+                inc     hl
+                ld      (linepos),hl
+                ld      hl,(cursorLine)
+                inc     hl
+                ld      (cursorLine),hl
+                pop     hl
+
+.no_eol         inc     hl
+                dec     de
+                ld      a,e
+                or      d
+                jr      nz,.l1
+
+.done           call    RealToVirt
+                ld      (pos),hl
+                pop     hl
+                pop     de
+                ret
+
+;;----------------------------------------------------------------------------------------------------------------------
+;; CursorVisible
+;; Manipulates top, dx, cursorX, cursorY to ensure cursor is on screen.  Only does something if the cursor is currently
+;; off-screen
+
+CursorVisible:
+                ; Remove cursor
+                ld      bc,(cursorX)
+                xor     a
+                call    DisplayCursor
+
+                ;;
+                ;; X cursor
+                ;;
+
+                ; Adjust X cursor according to dx and pos-linepos
+                call    Doc_LineOffset
+                ld      de,(dx)
+                sbc     hl,de                   ; HL = cursorX
+                ld      a,l
+                ld      (cursorX),a
+
+                ld      hl,0
+                ld      (Counter),hl            ; Ensure the cursor is visible
+
+                ret
+
+;;----------------------------------------------------------------------------------------------------------------------
+;; Commands
+
+MoveLeft:
+                call    Doc_LineOffset
+                jp      z,CursorVisible         ; At beginning of document
+
+                call    Doc_LineOffset
+                jr      z,.at_edge              ; Left side of line?
+
+                ld      de,1
+                call    Doc_MoveBack
+                jp      CursorVisible
+
+.at_edge:
+                ;#todo
+                ;Move cursor up and to the end
+                ret
+
+;;----------------------------------------------------------------------------------------------------------------------
+
+MoveRight:
+                call    Doc_FetchChar
+                cp      EOF                     ; End of file?
+                ret     z                       ; Yes, no cursor movement
+
+                cp      EOL                     ; End of line?
+                jr      nz,.move_cursor
+
+                ;#todo
+                ;Move cursor down and to the beginning of the line
+                ret
+
+.move_cursor    ld      de,1
+                call    Doc_MoveForward
+                jp      CursorVisible           ; Make it visible again
+
+;;----------------------------------------------------------------------------------------------------------------------
+
+MoveUp:
+                ret
+
+;;----------------------------------------------------------------------------------------------------------------------
+
+MoveDown:
+                ret
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------------------------------------------

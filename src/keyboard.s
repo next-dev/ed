@@ -11,7 +11,7 @@
 
                 ds      257,$80         ; Interrupt vector table
 
-BUFFERPAGE      equ     $5b
+BUFFERPAGE      equ     $be
 
 InitKeys:
                 di
@@ -57,10 +57,13 @@ DoneKeys:       di
 ;   0C                      1C  (Sym & Space)
 ;   0D  Enter               1D  Shift+Enter
 ;   0E                      1E  Sym+Enter
-;   0F  Ext                 1F  Ext+Enter
+;   0F                      1F           
 ;
 ; Keyboard ASCII codes (80-FF)
 ;
+;   80 - Extended Mode
+;   8D - Ext+Enter
+;   A0 - Ext+Space
 ;   B0-B9 - Ext+Number
 ;   E1-FA - Ext+Letter
 
@@ -89,6 +92,7 @@ ImRoutine:
                 ld      hl,KeyTrans
                 add     hl,a            ; HL = Key translation table
 
+                ld      ix,KBufferState ; Required for buffer routines
                 ; Now we scan our keyboard snapshot, and any keys that are detected to be pressed are added to
                 ; the circular buffer
                 ld      b,8
@@ -151,6 +155,7 @@ ImRoutine:
                 ei
                 reti
 
+KBufferState    dw      BUFFER_START
 Keys:           ds      16      ; Double-buffered interleaved space to store the key presses
                                 ; NEW OLD NEW OLD NEW OLD...
                                 ; Thought about having a dynamic pointer to switch buffers but it turns out
@@ -228,7 +233,7 @@ KeyTrans:
         db      '1'+$80,'2'+$80,'3'+$80,'4'+$80,'5'+$80         ; 1-5
         db      '0'+$80,'9'+$80,'8'+$80,'7'+$80,'6'+$80         ; 0-6
         db      'p'+$80,'o'+$80,'i'+$80,'u'+$80,'y'+$80         ; P-Y
-        db      $0d,    'l'+$80,'k'+$80,'j'+$80,'h'+$80         ; Enter-H
-        db      ' ',    $ff,    'm'+$80,'n'+$80,'b'+$80         ; Space-B
+        db      $8d,    'l'+$80,'k'+$80,'j'+$80,'h'+$80         ; Enter-H
+        db      $a0,    $ff,    'm'+$80,'n'+$80,'b'+$80         ; Space-B
         db      $ff,    'z'+$80,'x'+$80,'c'+$80,'v'+$80         ; Caps-V
 

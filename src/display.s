@@ -173,3 +173,60 @@ DisplayCursor:
                 pop     de
                 pop     hl
                 ret
+
+;;----------------------------------------------------------------------------------------------------------------------
+
+DebugValue      dw      0
+
+GetNibble:
+        ; Input:
+        ;       A = Value to get lower nibble as an ASCII character
+        ; Output:
+        ;       D = New value (A shifted right 4 times)
+        ;       E = ASCII character of lower nibble
+                ld      d,a
+                and     $f
+                cp      10
+                sbc     a,$69
+                daa
+                ld      e,a
+                ld      a,d
+                and     $f0
+                swapnib
+                ld      d,a
+                ret
+
+DebugByte:
+        ; Input:
+        ;       A = byte to output
+        ;       BC = YX coords
+        ; Output:
+        ;       BC = Coord of next position
+        ; Uses:
+        ;       DE, A
+        ;
+                swapnib                         ; Swap nibbles - print lower one first
+                call    GetNibble
+                push    de                      ; Store next value
+                ld      d,0                     ; Colour 0
+                call    PrintChar               ; Print the upper nibble
+                pop     de                      ; Restore next value
+                ld      a,d
+                inc     c                       ; Increment X coord
+                call    GetNibble               ; Get ASCII for next nibble
+                ld      d,0                     ; Colour 0
+                call    PrintChar               ; Print the lower nibble
+                inc     c
+                ret
+
+
+DisplayDebugger:
+                ld      bc,$1f4b
+
+                ; First nibble
+                ld      a,(DebugValue+1)
+                call    DebugByte
+                ld      a,(DebugValue)
+                jp      DebugByte
+
+

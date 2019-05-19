@@ -13,13 +13,35 @@ VirtToReal:
         ;   HL = virtual mark
         ; Output:
         ;   HL = real mark
-        ret
+        ;
+        ;#todo
+                push    af
+                ld      a,$c0
+                add     a,h
+                ld      h,a
+                pop     af
+                ret
+
+RealToVirt:
+        ; Convert a real address to a virtual mark.
+        ;
+        ; Input:
+        ;       HL = real address
+        ; Output:
+        ;       HL = virtual mark
+        ;
+        ;#todo
+                push    af
+                ld      a,h
+                sub     $c0
+                ld      h,a
+                pop     af
+                ret
 
 ;;----------------------------------------------------------------------------------------------------------------------
-;; Circular buffer - uses the print buffer at $5b00
+;; Circular buffer
 
-PRead   db      0       ; Offset in buffer of read point (should be <= PWrite)
-PWrite  db      1       ; Offset in buffer of write point
+BUFFER_START    equ     $0100
 
 ; Empty buffer:
 ;
@@ -38,40 +60,46 @@ PWrite  db      1       ; Offset in buffer of write point
 ;                       W
 
 BufferInsert:
-                ; Input
+                ; Input:
                 ;       B = Buffer page
                 ;       C = Value to insert
+                ;       IX = Pointer to read/write pointers
+                ; Note:
+                ;       The value that IX points to must be a 16-bit value initialised to BUFFER_START
+                ;
                 push    hl
                 push    af
 
-                ld      a,(PRead)
-                ld      hl,PWrite
-                cp      (hl)            ; Has PWrite reached PRead yet?
+                ld      a,(ix+0)
+                cp      (ix+1)          ; Has PWrite reached PRead yet?
                 ret     z               ; Return without error (buffer is full)
 
-                push    hl
-                ld      l,(hl)
+                ld      l,(ix+1)
                 ld      h,b             ; HL = write address
                 ld      (hl),c          ; write value in buffer
-                pop     hl
-                inc     (hl)
+                inc     (ix+1)
                 pop     af
                 pop     hl
                 ret
 
-BufferRead:     ; Output
+BufferRead:     ; Input:
+                ;       B = Buffer page
+                ;       IX = Pointer to read/write pointers
+                ; Output
                 ;       A = Value
                 ;       B = Buffer page
                 ;       ZF = 1 if nothing to read
+                ; Note:
+                ;       The value that IX points to must be a 16-bit value initialised to BUFFER_START
+                ;
                 push    hl
-                ld      a,(PWrite)
+                ld      a,(ix+1)
                 dec     a
-                ld      hl,PRead
-                cp      (hl)            ; Buffer is empty?
+                cp      (ix+0)            ; Buffer is empty?
                 jr      z,.finish
 
-                inc     (hl)            ; Advance read pointer
-                ld      l,(hl)
+                inc     (ix+0)            ; Advance read pointer
+                ld      l,(ix+0)
                 ld      h,b             ; HL = buffer pointer
                 ld      a,(hl)          ; Read data
                 and     a               ; Clear ZF
