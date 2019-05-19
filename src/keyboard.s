@@ -24,13 +24,7 @@ DoneKeys:       di
                 ei
                 ret
 
-; Scans the keyboard and returns button code
-;
-; Output:
-;   HL = ASCII code or 0 on no keys, or invalid
-;   CF = 1 on error
-; Destroys:
-;   BC, DE, HL, A
+; Scans the keyboard and returns button code - runs in IM 2
 ;
 ; Rows are:
 ;   Bits:   0       1       2       3       4
@@ -46,9 +40,9 @@ DoneKeys:       di
 ;
 ; Keyboard ASCII codes (00-1F)
 ;
-;   00                      10  Sym+W X
-;   01  Edit                11  Sym+E X
-;   02  Capslock            12  Sym+I X
+;   00                      10  Sym+W
+;   01  Edit                11  Sym+E
+;   02  Capslock            12  Sym+I
 ;   03  True Video          13  
 ;   04  Inv Video           14  
 ;   05  Left                15  
@@ -61,7 +55,7 @@ DoneKeys:       di
 ;   0C                      1C  (Sym & Space)
 ;   0D  Enter               1D  Shift+Enter
 ;   0E                      1E  Sym+Enter
-;   0F  Ext X               1F  Ext+Enter X
+;   0F  Ext                 1F  Ext+Enter
 ;
 ; Keyboard ASCII codes (80-FF)
 ;
@@ -93,7 +87,6 @@ ImRoutine:
                 ld      hl,KeyTrans
                 add     hl,a            ; HL = Key translation table
 
-.cont:
                 ; Now we scan our keyboard snapshot, and any keys that are detected to be pressed are added to
                 ; the circular buffer
                 ld      b,8
@@ -164,7 +157,7 @@ KeyScan:
                 ; Scan the keyboard
                 ld      bc,$fdfe        ; Keyboard ports (start here to make sure shift rows are last)
                 push    hl
-                ld      e,8             ; Checksum to know when to end loop
+                ld      e,8             ; There are 8 ports to read
 
 .l1             ld      d,(hl)          ; Get old state
                 in      a,(c)
@@ -189,42 +182,42 @@ KFlags:         db      0               ; Bit 0 = character available, reset whe
 
 KeyTrans:
         ; Unshifted
-        db      'a','s','d','f','g'
-        db      'q','w','e','r','t'
-        db      '1','2','3','4','5'
-        db      '0','9','8','7','6'
-        db      'p','o','i','u','y'
-        db      $0d,'l','k','j','h'
-        db      ' ',$ff,'m','n','b'
-        db      $ff,'z','x','c','v'
+        db      'a','s','d','f','g'                             ; A-G
+        db      'q','w','e','r','t'                             ; Q-T
+        db      '1','2','3','4','5'                             ; 1-5
+        db      '0','9','8','7','6'                             ; 0-6
+        db      'p','o','i','u','y'                             ; P-Y
+        db      $0d,'l','k','j','h'                             ; Enter-H
+        db      ' ',$ff,'m','n','b'                             ; Space-B
+        db      $ff,'z','x','c','v'                             ; Caps-V
 
         ; CAPS shifted
-        db      'A','S','D','F','G'
-        db      'Q','W','E','R','T'
-        db      $01,$02,$03,$04,$05
-        db      $0a,$09,$08,$07,$06
-        db      'P','O','I','U','Y'
-        db      $1d,'L','K','J','H'
-        db      $1b,$ff,'M','N','B'
-        db      $ff,'Z','X','C','V'
+        db      'A','S','D','F','G'                             ; A-G
+        db      'Q','W','E','R','T'                             ; Q-T
+        db      $01,$02,$03,$04,$05                             ; 1-5
+        db      $0a,$09,$08,$07,$06                             ; 0-6
+        db      'P','O','I','U','Y'                             ; P-Y
+        db      $1d,'L','K','J','H'                             ; Enter-H
+        db      $1b,$ff,'M','N','B'                             ; Space-B
+        db      $ff,'Z','X','C','V'                             ; Caps-V
 
         ; SYM shifted
-        db      '~','|','\','{','}'
-        db      $7f,'w','e','<','>'
-        db      '!','@','#','$','%'
-        db      '_',')','(',$27,'&'
-        db      $22,';','i',']','['
-        db      $1e,'=','+','-','^'
-        db      $1c,$ff,'.',',','*'
-        db      $ff,':','`','?','/'
+        db      '~','|','\','{','}'                             ; A-G
+        db      $7f,'w','e','<','>'                             ; Q-T
+        db      '!','@','#','$','%'                             ; 1-5
+        db      '_',')','(',$27,'&'                             ; 0-6
+        db      $22,';','i',']','['                             ; P-Y
+        db      $1e,'=','+','-','^'                             ; Enter-H
+        db      $1c,$ff,'.',',','*'                             ; Space-B
+        db      $ff,':','`','?','/'                             ; Caps-V
 
         ; EXT shifted
-        db      'a'+$80,'s'+$80,'d'+$80,'f'+$80,'g'+$80
-        db      'q'+$80,'w'+$80,'e'+$80,'r'+$80,'t'+$80
-        db      '1'+$80,'2'+$80,'3'+$80,'4'+$80,'5'+$80
-        db      '0'+$80,'9'+$80,'8'+$80,'7'+$80,'6'+$80
-        db      'p'+$80,'o'+$80,'i'+$80,'u'+$80,'y'+$80
-        db      $0d,    'l'+$80,'k'+$80,'j'+$80,'h'+$80
-        db      ' ',    $ff,    'm'+$80,'n'+$80,'b'+$80
-        db      $ff,    'z'+$80,'x'+$80,'c'+$80,'v'+$80
+        db      'a'+$80,'s'+$80,'d'+$80,'f'+$80,'g'+$80         ; A-G
+        db      'q'+$80,'w'+$80,'e'+$80,'r'+$80,'t'+$80         ; Q-T
+        db      '1'+$80,'2'+$80,'3'+$80,'4'+$80,'5'+$80         ; 1-5
+        db      '0'+$80,'9'+$80,'8'+$80,'7'+$80,'6'+$80         ; 0-6
+        db      'p'+$80,'o'+$80,'i'+$80,'u'+$80,'y'+$80         ; P-Y
+        db      $0d,    'l'+$80,'k'+$80,'j'+$80,'h'+$80         ; Enter-H
+        db      ' ',    $ff,    'm'+$80,'n'+$80,'b'+$80         ; Space-B
+        db      $ff,    'z'+$80,'x'+$80,'c'+$80,'v'+$80         ; Caps-V
 

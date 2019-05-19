@@ -65,11 +65,11 @@ Palette:
 
 SetColour:
         ; Input:
-        ;   B = Paper
-        ;   C = Ink
-        ;   A = Slot (0-15)
-        ; Destroys:
-        ;   HL, DE, BC, A
+        ;       B = Paper
+        ;       C = Ink
+        ;       A = Slot (0-15)
+        ; Uses:
+        ;       HL, DE, BC, A
         nextreg $43,%00110000   ; Set tilemap palette
         sla     a
         sla     a
@@ -97,12 +97,12 @@ SetColour:
 
 CalcTileAddress:
         ; Input:
-        ;   B = Y coord (0-31)
-        ;   C = X coord (0-79)
+        ;       B = Y coord (0-31)
+        ;       C = X coord (0-79)
         ; Output:
-        ;   HL = Tile address
-        ; Destroys:
-        ;   BC
+        ;       HL = Tile address
+        ; Uses:
+        ;       BC
         push    de
         ld      e,b
         ld      d,80
@@ -121,14 +121,14 @@ CalcTileAddress:
 
 Print:
         ; Input
-        ;   B = Y coord (0-31)
-        ;   C = X coord (0-79)
-        ;   DE = string
-        ;   A = colour (0-15)
+        ;       B = Y coord (0-31)
+        ;       C = X coord (0-79)
+        ;       DE = string
+        ;       A = colour (0-15)
         ; Output:
-        ;   DE = points after string
-        ; Destroys:
-        ;   BC, HL, DE, A
+        ;       DE = points after string
+        ; Uses:
+        ;       BC, HL, DE, A
 
         ; Calculate tilemap address
         call    CalcTileAddress
@@ -152,14 +152,15 @@ Print:
 
 PrintChar:
         ; Input:
-        ;   B = Y coord (0-31)
-        ;   C = X coord (0-79)
-        ;   D = Colour (0-15)
-        ;   E = character
+        ;       B = Y coord (0-31)
+        ;       C = X coord (0-79)
+        ;       D = Colour (0-15)
+        ;       E = character
         ; Output:
-        ;   HL = Tilemap address of following position
-        ; Destroys:
-        ;   BC, A
+        ;       HL = Tilemap address of following position
+        ; Uses:
+        ;       A
+        push    bc
         call    CalcTileAddress
         ld      a,e
         ld      (hl),a
@@ -168,18 +169,40 @@ PrintChar:
         swapnib
         ld      (hl),a
         inc     hl
+        pop     bc
+        ret
+
+AdvancePos:
+        ; Advances position to next position on screen.  This will wrap to next line or back to the top of the screen.
+        ; Input:
+        ;       B = Y coord (0-31)
+        ;       C = X coord (0-79)
+        ; Output:
+        ;       BC = next position XY.
+        ; Uses:
+        ;       A
+        ;
+        inc     c
+        cp      80
+        ret     nz
+        xor     a
+        ld      c,a
+        inc     b
+        cp      32
+        ret     nz
+        ld      b,a
         ret
 
 WriteSpace:
         ; Draw a rectangular area of spaces
         ; Input
-        ;   B = Y coord (0-31) of start
-        ;   C = X coord (0-79) of start
-        ;   D = height
-        ;   E = width
-        ;   A = colour (0-15)
-        ; Destroys
-        ;   HL, BC, DE, A
+        ;       B = Y coord (0-31) of start
+        ;       C = X coord (0-79) of start
+        ;       D = height
+        ;       E = width
+        ;       A = colour (0-15)
+        ; Uses:
+        ;       HL, BC, DE, A
         call    CalcTileAddress     ; HL = start corner
         add     a,a
         add     a,a
@@ -212,8 +235,8 @@ WriteSpace:
 
 ClearScreen:
         ; Clear screen (write spaces in colour 0 everywhere)
-        ; Destroys
-        ;   BC, HL, A
+        ; Uses:
+        ;       BC, HL, A
         ld      bc,2560
         ld      hl,$4000
 .l1     ld      a,' '

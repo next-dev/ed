@@ -130,6 +130,10 @@ Main:
                 jr      z,.l1
                 res     0,(hl)
 
+                ld      a,(Key)
+                cp      $1b
+                ret     z
+
                 push    bc
                 ld      a,(Key)
                 res     0,(hl)
