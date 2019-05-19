@@ -153,20 +153,19 @@ DisplayCursor:
         ;       A = cursor colour slot (0-15)
                 push    de
                 push    hl
+                call    CalcTileAddress
+                inc     hl                      ; Advance to attribute part
         
                 swapnib
                 ld      e,a                     ; E = cursor colour
         
         ; Let's find out the actual colour of the cursor based on the frame counter
-                br
                 ld      a,(Counter)
-                and     64
+                and     32
                 jr      z,.cursor_appears
                 ld      e,0
         
-.cursor_appears call    CalcTileAddress
-                inc     hl                      ; Advance to attribute part
-                ld      a,(hl)
+.cursor_appears ld      a,(hl)                  ; Replace colour
                 and     $0f
                 or      e
                 ld      (hl),a
