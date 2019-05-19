@@ -24,12 +24,13 @@ REPPER  equ     $5c0a
 FLAGS   equ     $5c3b
 MODE    equ     $5c41
 
-;;
+;;----------------------------------------------------------------------------------------------------------------------
 ;; Constants
 ;;
 
-EOL     equ     $0d
-EOF     equ     $1a
+EOL             equ     $0d
+EOF             equ     $1a
+CMDBUFFER       equ     $be
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Memory map
@@ -40,6 +41,8 @@ EOF     equ     $1a
 ; $5b00         256 circular buffer
 ; $6000         Tiles
 ; $7fff         Code
+; $be00         Commandbuffer
+; $bf00         Keyboard buffer
 ; $c000         Data
 
 ;;----------------------------------------------------------------------------------------------------------------------
@@ -73,7 +76,7 @@ top             dw      0           ; Offset of character shown at start of top 
 dx              dw      0           ; Indent
 mark            dw      0           ; Virtual offset into doc where cursor is
 cursorX         db      0           ; Screen X coord of cursor
-cursorY         db      0           ; Screen Y coord of cursor
+cursorY         db      1           ; Screen Y coord of cursor
 cursorLine      dw      0           ; Line which cursor resides
 
 ; Buffer state
@@ -121,38 +124,19 @@ Initialise:
 ;; The main loop
 
 Main:
-                ld      bc,0
+                call    ClearScreen
 
-.l1
-                ; Read a key
-                ld      hl,KFlags
-                bit     0,(hl)
-                jr      z,.l1
-                res     0,(hl)
+MainLoop:
+                halt
+                call    DisplayScreen
+                ld      a,(cursorY)
+                ld      b,a
+                ld      a,(cursorX)
+                ld      c,a
+                ld      a,2
+                call    DisplayCursor
 
-                ld      a,(Key)
-                cp      $1b
-                ret     z
-
-                push    bc
-                ld      a,(Key)
-                res     0,(hl)
-                ld      e,a
-                ld      d,0
-                call    PrintChar
-                pop     bc
-
-                inc     c
-                ld      a,c
-                cp      80
-                jr      nz,.l1
-                inc     b
-                ld      c,0
-                cp      32
-                jr      nz,.l1
-                ld      b,c
-
-                jr      .l1
+                jr      MainLoop
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------------------------------------------

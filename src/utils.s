@@ -37,10 +37,9 @@ PWrite  db      1       ; Offset in buffer of write point
 ;                       R
 ;                       W
 
-BufferPage:     db      $5b
-
 BufferInsert:
                 ; Input
+                ;       B = Buffer page
                 ;       C = Value to insert
                 push    hl
                 push    af
@@ -52,8 +51,7 @@ BufferInsert:
 
                 push    hl
                 ld      l,(hl)
-                ld      a,(BufferPage)  ; DE = write address
-                ld      h,a
+                ld      h,b             ; HL = write address
                 ld      (hl),c          ; write value in buffer
                 pop     hl
                 inc     (hl)
@@ -63,6 +61,7 @@ BufferInsert:
 
 BufferRead:     ; Output
                 ;       A = Value
+                ;       B = Buffer page
                 ;       ZF = 1 if nothing to read
                 push    hl
                 ld      a,(PWrite)
@@ -73,8 +72,7 @@ BufferRead:     ; Output
 
                 inc     (hl)            ; Advance read pointer
                 ld      l,(hl)
-                ld      a,(BufferPage)
-                ld      h,a             ; HL = buffer pointer
+                ld      h,b             ; HL = buffer pointer
                 ld      a,(hl)          ; Read data
                 and     a               ; Clear ZF
 .finish         pop     hl

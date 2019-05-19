@@ -11,6 +11,8 @@
 
                 ds      257,$80         ; Interrupt vector table
 
+BUFFERPAGE      equ     $5b
+
 InitKeys:
                 di
                 ld      a,$7f
@@ -109,7 +111,10 @@ ImRoutine:
                 inc     c               ; C == $ff?
                 jr      z,.ignore
                 dec     c
+                push    bc
+                ld      b,BUFFERPAGE
                 call    BufferInsert    ; Insert into circular buffer
+                pop     bc
 .ignore         inc     hl              ; Next entry into table
                 jr      .col
 
@@ -123,6 +128,7 @@ ImRoutine:
                 bit     0,(hl)
                 jr      nz,.finish      ; Still haven't processed last key yet
 
+                ld      b,BUFFERPAGE
                 call    BufferRead
                 jr      z,.no_chars
                 ld      (Key),a         ; Next key available
@@ -133,6 +139,10 @@ ImRoutine:
                 ld      (Key),a
 
 .finish
+                ; Advance counter
+                ld      hl,(Counter)
+                inc     hl
+                ld      (Counter),hl
                 pop     ix
                 pop     hl
                 pop     de
@@ -177,6 +187,7 @@ KeyScan:
 
 Key:            db      0               ; Latest ASCII character
 KFlags:         db      0               ; Bit 0 = character available, reset when test
+Counter:        dw      0               ; 50/60Hz counter
 
 ;;----------------------------------------------------------------------------------------------------------------------
 
