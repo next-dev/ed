@@ -32,11 +32,12 @@ InitVideo:
         ;       $4000   80x32x2 tilemap (5120 bytes)
         ;       $6000   128*32 tiles (4K)
         ;
-                nextreg $6b,%11000001       ; Tilemap control
-                nextreg $6e,$00             ; Tilemap base offset
-                nextreg $6f,$20             ; Tiles base offset
-                nextreg $4c,8               ; Transparency colour (bright black)
-                nextreg $68,%10000000       ; Disable ULA output
+                nextreg $07,2                   ; Set speed to 14Mhz
+                nextreg $6b,%11000001           ; Tilemap control
+                nextreg $6e,$00                 ; Tilemap base offset
+                nextreg $6f,$20                 ; Tiles base offset
+                nextreg $4c,8                   ; Transparency colour (bright black)
+                nextreg $68,%10000000           ; Disable ULA output
 
 DoneVideo:
                 ret
