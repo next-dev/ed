@@ -6,7 +6,7 @@ opt     sna=Start:$7fff
 opt     zxnext
 opt     zxnextreg
 
-BR      macro
+BREAK   macro
         dw      $01dd
         endm
 
@@ -101,6 +101,7 @@ Main:
                 halt
 
 MainLoop:
+                halt
                 call    DisplayScreen
 .l1             ld      a,(cursorY)
                 ld      b,a
@@ -120,6 +121,7 @@ MainLoop:
                 ld      c,a             ; C = key code
 
 
+ProcessKey:
                 ld      hl,ModeTable
                 ld      a,(Mode)
                 add     a,a
@@ -182,6 +184,14 @@ Cmd_CursorDown:
                 ld      c,'j'
                 jp      BufferInsert
 
+Cmd_Home:
+                ld      c,'^'
+                jp      BufferInsert
+
+Cmd_End:
+                ld      c,'$'
+                jp      BufferInsert
+
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Command interpreter
 
@@ -204,6 +214,17 @@ FlushCommands:
                 call    CallHL
 
                 jr      FlushCommands
+
+;;----------------------------------------------------------------------------------------------------------------------
+
+AdvanceReal:
+        ; Input
+        ;       HL = real address of buffer
+        ;
+                call    RealToVirt
+                inc     hl
+                call    VirtToReal
+                ret
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Document access functions
@@ -258,6 +279,29 @@ Doc_LineOffset:
                 pop     de
                 ret
 
+Doc_ToNextLine:
+        ; Output
+        ;       BC = number of characters to end of line
+        ;
+                push    af
+                push    de
+                push    hl
+                ld      hl,(pos)
+                call    VirtToReal
+
+                ld      bc,0
+.l1             ld      a,(hl)          ; Get next character
+                cp      EOF             ; End of file?
+                jr      z,.done
+                cp      EOL             ; End of line?
+                jr      z,.done
+                inc     bc
+                call    AdvanceReal
+                jr      .l1
+.done           pop     hl
+                pop     de
+                pop     af
+                ret
 
 Doc_AtEndLine:
         ; Output
@@ -510,4 +554,22 @@ MoveDown:
                 ret
 
 ;;----------------------------------------------------------------------------------------------------------------------
+
+MoveHome:
+                call    Doc_LineOffset
+                ex      de,hl
+                call    Doc_MoveBack
+                jp      CursorVisible
+
 ;;----------------------------------------------------------------------------------------------------------------------
+
+MoveEnd:        call    Doc_ToNextLine
+                ld      d,b
+                ld      e,c
+                call    Doc_MoveForward
+                jp      CursorVisible
+
+;;----------------------------------------------------------------------------------------------------------------------
+;;----------------------------------------------------------------------------------------------------------------------
+
+        message "Final address: ",PC

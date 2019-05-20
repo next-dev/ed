@@ -35,7 +35,7 @@ NormalCmdTable:
         dw      DoNothing                       ; 0c
         dw      DoNothing                       ; 0d - Enter
         dw      DoNothing                       ; 0e
-        dw      DoNothing                       ; 0f - Extended Mode
+        dw      DoNothing                       ; 0f
 
         dw      DoNothing                       ; 10 - Sym+W
         dw      DoNothing                       ; 11 - Sym+I
@@ -52,13 +52,13 @@ NormalCmdTable:
         dw      DoNothing                       ; 1c - Sym+Space
         dw      DoNothing                       ; 1d - Shift+Enter
         dw      DoNothing                       ; 1e - Sym+Enter
-        dw      DoNothing                       ; 1f - Ext+Enter
+        dw      DoNothing                       ; 1f
 
         dw      DoNothing                       ; 20 - Space
         dw      DoNothing                       ; 21 - !
         dw      DoNothing                       ; 22 - "
         dw      DoNothing                       ; 23 - #
-        dw      DoNothing                       ; 24 - $
+        dw      BufferInsert                    ; 24 - $
         dw      DoNothing                       ; 25 - %
         dw      DoNothing                       ; 26 - &
         dw      DoNothing                       ; 27 - '
@@ -119,7 +119,7 @@ NormalCmdTable:
         dw      DoNothing                       ; 5b - [
         dw      DoNothing                       ; 5c - \
         dw      DoNothing                       ; 5d - ]
-        dw      DoNothing                       ; 5e - ^
+        dw      BufferInsert                    ; 5e - ^
         dw      DoNothing                       ; 5f - _
 
         dw      DoNothing                       ; 60 - Pound sign
@@ -156,7 +156,7 @@ NormalCmdTable:
         dw      DoNothing                       ; 7e - ~
         dw      DoNothing                       ; 7f - (C)
 
-        dw      DoNothing                       ; 80
+        dw      DoNothing                       ; 80 - Extended Mode
         dw      DoNothing                       ; 81
         dw      DoNothing                       ; 82
         dw      DoNothing                       ; 83
@@ -169,7 +169,7 @@ NormalCmdTable:
         dw      DoNothing                       ; 8a
         dw      DoNothing                       ; 8b
         dw      DoNothing                       ; 8c
-        dw      DoNothing                       ; 8d
+        dw      DoNothing                       ; 8d - Ext+Enter
         dw      DoNothing                       ; 8e
         dw      DoNothing                       ; 8f
 
@@ -190,7 +190,7 @@ NormalCmdTable:
         dw      DoNothing                       ; 9e
         dw      DoNothing                       ; 9f
 
-        dw      DoNothing                       ; a0
+        dw      DoNothing                       ; a0 - Ext+Space
         dw      DoNothing                       ; a1
         dw      DoNothing                       ; a2
         dw      DoNothing                       ; a3
@@ -208,16 +208,16 @@ NormalCmdTable:
         dw      DoNothing                       ; af
 
         dw      DoNothing                       ; b0 - Ext+0
-        dw      DoNothing                       ; b1 - Ext+1
-        dw      DoNothing                       ; b2 - Ext+2
-        dw      DoNothing                       ; b3 - Ext+3
-        dw      DoNothing                       ; b4 - Ext+4
-        dw      DoNothing                       ; b5 - Ext+5
-        dw      DoNothing                       ; b6 - Ext+6
-        dw      DoNothing                       ; b7 - Ext+7
-        dw      DoNothing                       ; b8 - Ext+8
-        dw      DoNothing                       ; b9 - Ext+9
-        dw      DoNothing                       ; ba
+        dw      DoNothing                       ; b1 - Ext+1/Edit
+        dw      DoNothing                       ; b2 - Ext+2/Caps Lock
+        dw      DoNothing                       ; b3 - Ext+3/True Video
+        dw      DoNothing                       ; b4 - Ext+4/Inv Video
+        dw      Cmd_Home                        ; b5 - Ext+5/Left
+        dw      DoNothing                       ; b6 - Ext+6/Down
+        dw      DoNothing                       ; b7 - Ext+7/Up
+        dw      Cmd_End                         ; b8 - Ext+8/Right
+        dw      DoNothing                       ; b9 - Ext+9/Graph/TAB
+        dw      DoNothing                       ; ba - Ext+Delete
         dw      DoNothing                       ; bb
         dw      DoNothing                       ; bc
         dw      DoNothing                       ; bd
@@ -301,7 +301,7 @@ MainCmdTable:
         dw      DoNothing                       ; 21 - !
         dw      DoNothing                       ; 22 - "
         dw      DoNothing                       ; 23 - #
-        dw      DoNothing                       ; 24 - $
+        dw      MoveEnd                         ; 24 - $
         dw      DoNothing                       ; 25 - %
         dw      DoNothing                       ; 26 - &
         dw      DoNothing                       ; 27 - '
@@ -362,7 +362,7 @@ MainCmdTable:
         dw      DoNothing                       ; 5b - [
         dw      DoNothing                       ; 5c - \
         dw      DoNothing                       ; 5d - ]
-        dw      DoNothing                       ; 5e - ^
+        dw      MoveHome                        ; 5e - ^
         dw      DoNothing                       ; 5f - _
 
         dw      DoNothing                       ; 60 - Pound sign

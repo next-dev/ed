@@ -161,7 +161,7 @@ DisplayCursor:
         
         ; Let's find out the actual colour of the cursor based on the frame counter
                 ld      a,(Counter)
-                and     32
+                and     16
                 jr      z,.cursor_appears
                 ld      e,0
         
