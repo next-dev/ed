@@ -106,4 +106,18 @@ BufferRead:     ; Input:
 .finish         pop     hl
                 ret
 
+;;----------------------------------------------------------------------------------------------------------------------
+;; 16-bit compare
 
+Compare16:
+        ; Input:
+        ;       HL = 1st value
+        ;       DE = 2nd value
+        ; Output:
+        ;       CF, ZF = results of comparison
+        ;
+                push    hl
+                and     a
+                sbc     hl,de
+                pop     hl
+                ret

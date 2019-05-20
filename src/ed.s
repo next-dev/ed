@@ -99,10 +99,10 @@ Initialise:
 Main:
                 call    ClearScreen
                 halt
-                call    DisplayScreen
 
 MainLoop:
-                ld      a,(cursorY)
+                call    DisplayScreen
+.l1             ld      a,(cursorY)
                 ld      b,a
                 ld      a,(cursorX)
                 ld      c,a
@@ -113,7 +113,7 @@ MainLoop:
         ; Read keyboard and insert commands into the command buffer
                 ld      hl,KFlags
                 bit     0,(hl)
-                jr      z,MainLoop      ; Still waiting for a key
+                jr      z,.l1           ; Still waiting for a key
                 ld      a,(Key)
                 res     0,(hl)          ; Consume key
                 ld      e,a             ; E = key code
@@ -363,6 +363,54 @@ Doc_MoveForward:
 ;; Manipulates top, dx, cursorX, cursorY to ensure cursor is on screen.  Only does something if the cursor is currently
 ;; off-screen
 
+StartPoint      dw      0       ; Start range of screen on axis
+EndPoint        dw      0       ; End range of screen on axis
+CursorPoint     dw      0       ; Current cursor position
+
+OutOffset       dw      0       ; Offset required to keep cursor on screen
+OutCursor       dw      0       ; Cursor position
+
+ProcessAxis:
+                ld      hl,(CursorPoint)
+                ld      de,(StartPoint)
+                call    Compare16               ; X < S?
+                jr      c,.to_left
+                ld      de,(EndPoint)
+                call    Compare16               ; X < E?
+                jr      c,.centre
+
+                ; Here the cursor is past the endpoint
+                ; HL = Cursor
+                ld      de,(EndPoint)
+                dec     de
+                and     a
+                sbc     hl,de                   ; HL = difference between cursor and end point
+                ex      de,hl
+                ld      hl,(StartPoint)
+                add     hl,de
+                ld      (OutOffset),hl
+                ld      hl,(EndPoint)
+                ld      de,(StartPoint)
+                and     a
+                sbc     hl,de
+                dec     hl
+                ld      (OutCursor),hl
+                ret
+
+.to_left        ; Here the cursor is before the start point
+                ld      (OutOffset),hl
+                ld      hl,0
+                ld      (OutCursor),hl
+                ret
+
+.centre         ; Everything is just fine
+                ld      de,(StartPoint)
+                and     a
+                sbc     hl,de                   ; HL = position from left of screen
+                ld      (OutCursor),hl
+                ld      (OutOffset),de
+                ret
+
 CursorVisible:
                 ; Remove cursor
                 ld      bc,(cursorX)
@@ -373,16 +421,45 @@ CursorVisible:
                 ;; X cursor
                 ;;
 
-                ; Adjust X cursor according to dx and pos-linepos
-                call    Doc_LineOffset
-                ld      de,(dx)
-                sbc     hl,de                   ; HL = cursorX
+                call    Doc_LineOffset          ; HL = offset into current line
+                ld      (CursorPoint),hl
+                ld      hl,(dx)
+                ld      (StartPoint),hl
+                ld      a,80
+                add     hl,a
+                ld      (EndPoint),hl
+                call    ProcessAxis
+
+                ld      hl,(OutOffset)
+                ld      (dx),hl
+                ld      hl,(OutCursor)
                 ld      a,l
                 ld      (cursorX),a
 
+                ;;
+                ;; Y Cursor
+                ;;
+
+                ld      hl,(cursorLine)
+                ld      (CursorPoint),hl
+                ld      hl,(topLine)
+                ld      (StartPoint),hl
+                ld      a,30
+                add     hl,a
+                ld      (EndPoint),hl
+                call    ProcessAxis
+
+                ;#todo - Adjust top and topline to meet OutOffset
+                ld      hl,(OutCursor)
+                inc     l
+                ld      a,l
+                ld      (cursorY),a
+
+                ;;
+                ;; End
+                ;;
                 ld      hl,0
                 ld      (Counter),hl            ; Ensure the cursor is visible
-
                 ret
 
 ;;----------------------------------------------------------------------------------------------------------------------
