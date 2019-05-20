@@ -319,7 +319,14 @@ Doc_MoveBack:
         ; Input
         ;       DE = number of places to move
         ;
-                push    de
+                push    af
+                ld      a,d
+                or      e
+                jr      nz,.not0        ; Return if DE == 0
+                pop     af
+                ret
+
+.not0           push    de
                 push    hl
                 ld      hl,(pos)
                 and     a
@@ -348,9 +355,11 @@ Doc_MoveBack:
                 cp      EOL
                 jr      nz,.l1
 
+                push    hl
+                call    RealToVirt
                 inc     hl
                 ld      (linepos),hl    ; Update new linepos
-                dec     hl
+                pop     hl
                 push    hl
                 ld      hl,(cursorLine)
                 dec     hl
@@ -364,6 +373,7 @@ Doc_MoveBack:
                 ld      (pos),hl
                 pop     hl
                 pop     de
+                pop     af
                 ret
                 
 Doc_MoveForward:
@@ -371,7 +381,14 @@ Doc_MoveForward:
         ; Input
         ;       DE = number of places to move
         ;
-                push    de
+                push    af
+                ld      a,d
+                or      e
+                jr      nz,.not0        ; Return if DE == 0
+                pop     af
+                ret
+
+.not0           push    de
                 push    hl
                 ld      hl,(pos)
                 call    VirtToReal
@@ -383,6 +400,7 @@ Doc_MoveForward:
                 jr      nz,.no_eol
 
                 push    hl
+                call    RealToVirt
                 inc     hl
                 ld      (linepos),hl
                 ld      hl,(cursorLine)
@@ -400,6 +418,7 @@ Doc_MoveForward:
                 ld      (pos),hl
                 pop     hl
                 pop     de
+                pop     af
                 ret
 
 ;;----------------------------------------------------------------------------------------------------------------------
@@ -532,26 +551,41 @@ MoveRight:
                 cp      EOF                     ; End of file?
                 ret     z                       ; Yes, no cursor movement
 
-                cp      EOL                     ; End of line?
-                jr      nz,.move_cursor
-
-                ;#todo
-                ;Move cursor down and to the beginning of the line
-                ret
-
-.move_cursor    ld      de,1
+                ld      de,1
                 call    Doc_MoveForward
                 jp      CursorVisible           ; Make it visible again
 
 ;;----------------------------------------------------------------------------------------------------------------------
 
+LastX           dw      0
+
 MoveUp:
+                call    Doc_LineOffset
                 ret
 
 ;;----------------------------------------------------------------------------------------------------------------------
 
 MoveDown:
-                ret
+                call    Doc_LineOffset
+                ld      (LastX),hl              ; Store the horizontal position
+                call    Doc_ToNextLine
+                ld      d,b
+                ld      e,c
+                call    Doc_MoveForward         ; Jump to the end of the line
+                call    Doc_FetchChar           ; Is it an EOF?
+                cp      EOF
+                jp      z,CursorVisible         ; Yes, go no further
+
+                ld      de,1
+                call    Doc_MoveForward         ; Move to beginning of next line
+                call    Doc_ToNextLine          ; BC = length of line
+                ld      hl,(LastX)              ; HL = intended position
+                ld      d,b
+                ld      e,c                     ; DE = line length
+                call    Max                     ; DE = actual position
+                call    Doc_MoveForward
+
+                jp      CursorVisible
 
 ;;----------------------------------------------------------------------------------------------------------------------
 
@@ -563,7 +597,8 @@ MoveHome:
 
 ;;----------------------------------------------------------------------------------------------------------------------
 
-MoveEnd:        call    Doc_ToNextLine
+MoveEnd:        
+                call    Doc_ToNextLine
                 ld      d,b
                 ld      e,c
                 call    Doc_MoveForward

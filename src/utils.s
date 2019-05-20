@@ -121,3 +121,25 @@ Compare16:
                 sbc     hl,de
                 pop     hl
                 ret
+
+;;----------------------------------------------------------------------------------------------------------------------
+;; max
+
+Max:
+        ; Input:
+        ;       HL = 1st value
+        ;       DE = 2nd value
+        ; Output:
+        ;       HL = maximum value
+        ;       DE = minimum value
+        ;       CF = 1 if DE was maximum
+        ;
+                and     a
+                sbc     hl,de
+                jr      c,.choose_2nd   ; HL < DE?  Choose DE!
+                add     hl,de           ; Restore HL
+                ret
+.choose_2nd     add     hl,de
+                ex      de,hl
+                scf
+                ret
