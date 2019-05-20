@@ -266,11 +266,11 @@ NormalCmdTable:
         dw      DoNothing                       ; e5 - Ext+e
         dw      DoNothing                       ; e6 - Ext+f
         dw      DoNothing                       ; e7 - Ext+g
-        dw      DoNothing                       ; e8 - Ext+h
+        dw      Cmd_Home                        ; e8 - Ext+h
         dw      DoNothing                       ; e9 - Ext+i
         dw      DoNothing                       ; ea - Ext+j
         dw      DoNothing                       ; eb - Ext+k
-        dw      DoNothing                       ; ec - Ext+l
+        dw      Cmd_End                         ; ec - Ext+l
         dw      DoNothing                       ; ed - Ext+m
         dw      DoNothing                       ; ee - Ext+n
         dw      DoNothing                       ; ef - Ext+o
