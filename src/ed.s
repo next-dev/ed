@@ -601,11 +601,8 @@ CursorVisible:
 ;; Commands
 
 MoveLeft:
-                call    Doc_LineOffset
+                call    Doc_AtStartDoc
                 jp      z,CursorVisible         ; At beginning of document
-
-                call    Doc_LineOffset
-                jr      z,.at_edge              ; Left side of line?
 
                 ld      de,1
                 call    Doc_MoveBack
