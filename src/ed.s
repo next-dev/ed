@@ -98,7 +98,13 @@ Initialise:
 
 Main:
                 call    ClearScreen
-                halt
+
+                ld      b,29
+.l1             push    bc
+                call    MoveDown
+                pop     bc
+                djnz    .l1
+                call    CursorVisible
 
 MainLoop:
                 halt
@@ -433,7 +439,7 @@ EndPoint        dw      0       ; End range of screen on axis
 CursorPoint     dw      0       ; Current cursor position
 
 OutOffset       dw      0       ; Offset required to keep cursor on screen
-OutCursor       dw      0       ; Cursor position
+OutCursor       dw      0       ; Cursor position from top of screen
 
 ProcessAxis:
                 ld      hl,(CursorPoint)
@@ -453,12 +459,12 @@ ProcessAxis:
                 ex      de,hl
                 ld      hl,(StartPoint)
                 add     hl,de
-                ld      (OutOffset),hl
-                ld      hl,(EndPoint)
-                ld      de,(StartPoint)
+                ld      (OutOffset),hl          ; New offset
+
+                ex      de,hl                   ; DE = offset
+                ld      hl,(CursorPoint)        ; HL = cursor point
                 and     a
-                sbc     hl,de
-                dec     hl
+                sbc     hl,de                   ; HL = relative cursor position
                 ld      (OutCursor),hl
                 ret
 
@@ -514,9 +520,80 @@ CursorVisible:
                 ld      (EndPoint),hl
                 call    ProcessAxis
 
-                ;#todo - Adjust top and topline to meet OutOffset
+                ; Scroll up or scroll down?
+                ld      hl,(topLine)
+                ld      de,(OutOffset)
+                ld      (topLine),de
+                and     a
+                sbc     hl,de                   ; topLine < OutOffset
+                jr      c,.scroll_down          ; Yes, need to scroll downwards from topLine to OutOffset
+                jr      z,.no_scroll            ; No scrolling required
+
+                ; topLine > OutOffset, which means we have to scroll upwards
+                ; HL = number of lines to scroll
+                ld      c,l
+                ld      b,h
+                ld      hl,(pos)
+                push    hl                      ; Store position
+                ld      hl,(linepos)
+                push    hl
+                ld      hl,(cursorLine)
+                push    hl
+                ld      hl,(top)
+                ld      (pos),hl
+
+.l1             ld      hl,(pos)
+                dec     hl                      ; Move to end of previous line
+                ld      (pos),hl
+                call    Doc_LineOffset          ; HL = number of characters in line
+                ex      de,hl
+                call    Doc_MoveBack            ; Move to beginning of line
+                dec     bc
+                ld      a,b
+                or      c
+                jr      nz,.l1
+
+.update_top     ld      hl,(pos)
+                ld      (top),hl
+                pop     hl
+                ld      (cursorLine),hl
+                pop     hl
+                ld      (linepos),hl
+                pop     hl
+                ld      (pos),hl                ; Restore position
+                jr      .no_scroll
+
+.scroll_down    ; topLine < OutOffset, which means we have to scroll downwards
+                ld      c,l
+                ld      b,h
+
+                ; Store current position, since we're going to move the cursor to the top of the
+                ; screen to do the adjustments
+                ld      hl,(pos)
+                push    hl
+                ld      hl,(linepos)
+                push    hl
+                ld      hl,(cursorLine)
+                push    hl
+                ld      hl,(top)
+                ld      (pos),hl
+
+.l2             push    bc
+                call    Doc_ToNextLine          ; BC = length of line
+                ld      e,c
+                ld      d,b
+                inc     de
+                call    Doc_MoveForward         ; Move to beginning of next line
+                pop     bc
+                inc     bc
+                ld      a,b
+                or      c
+                jr      nz,.l2
+                jr      .update_top
+
+.no_scroll:     ; topLine is now in the right place
                 ld      hl,(OutCursor)
-                inc     l
+                inc     hl                      ; HL = Cursor Y position, +1 to skip title
                 ld      a,l
                 ld      (cursorY),a
 
