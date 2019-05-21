@@ -18,3 +18,5 @@ cursorLine      dw      0           ; Line which cursor resides
 
 ; Commands
 CmdBufferState  dw      BUFFER_START
+
+

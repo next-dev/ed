@@ -232,7 +232,7 @@ AdvanceReal:
 ;; to add virtual access and 24-bit file sizes.
 
 Doc_FetchChar:
-        ; Output
+        ; Output:
         ;       A = character under cursor
                 push    hl
                 ld      hl,(pos)
@@ -242,30 +242,29 @@ Doc_FetchChar:
                 ret
 
 Doc_AtStartDoc:
-        ; Output
+        ; Output:
         ;       ZF = 1 if at start of doc
+        ; Uses:
+        ;       A
         ;
-                push    af
                 push    hl
                 ld      hl,(pos)
                 ld      a,h
                 or      l
                 pop     hl
-                pop     af
                 ret
 
 Doc_AtEndDoc:
-        ; Output
+        ; Output:
         ;       ZF = 1 if at end of doc
+        ;       A = current character
         ;
-                push    af
                 call    Doc_FetchChar
                 cp      EOF
-                pop     af
                 ret
 
 Doc_LineOffset:
-        ; Output
+        ; Output:
         ;       HL = position in line
         ;       ZF = 1 if at start of line
         ;       CF = 0
@@ -280,7 +279,7 @@ Doc_LineOffset:
                 ret
 
 Doc_ToNextLine:
-        ; Output
+        ; Output:
         ;       BC = number of characters to end of line
         ;
                 push    af
@@ -304,21 +303,21 @@ Doc_ToNextLine:
                 ret
 
 Doc_AtEndLine:
-        ; Output
+        ; Output:
         ;       ZF = 1 if at end of line
         ;       CF = 0
+        ;       A = Current character under cursor
         ;
-                push    af
                 call    Doc_FetchChar
                 cp      EOL
-                pop     af
                 ret
 
 Doc_MoveBack:
         ; Will not move past start of document
-        ; Input
+        ; Input:
         ;       DE = number of places to move
         ;
+                ; Check the trivial case of not moving any places
                 push    af
                 ld      a,d
                 or      e
@@ -326,6 +325,8 @@ Doc_MoveBack:
                 pop     af
                 ret
 
+                ; Check to see if moving back doesn't go past beginning of document.  If so,
+                ; clamp it at the beginning.
 .not0           push    de
                 push    hl
                 ld      hl,(pos)
@@ -334,52 +335,59 @@ Doc_MoveBack:
                 jr      nc,.ok          ; Jump if there was room to move back that amount
                 ld      hl,0
                 ld      (linepos),hl
-                jr      .done2
+                jr      UpdatePos
 
-.ok             call    VirtToReal
-                ld      e,l
-                ld      d,h             ; DE = new position
-                ld      hl,(pos)        ; HL = old address
-                call    VirtToReal
+                ; We can move back DE number of places
+.ok             ld      hl,(pos)        ; HL = current position
 
-                ; We need to update linepos and cursorLine.  So loop through the characters updating state
-                ; as we go
-.l1             and     a
-                sbc     hl,de
-                jr      z,.done         ; We've reached out end point
-                add     hl,de
+.l1             dec     hl
+                ld      (pos),hl
+                call    Doc_FetchChar   ; Get the current character under pos
+                cp      EOL             ; Reached end of line?
+                jr      z,.eol          ; Yes, we need to update linepos and cursor
 
-                dec     hl              ; Move back and test
-                ld      a,(hl)
-                cp      EOL
-                jr      nz,.l1
+.cont           dec     de
+                ld      a,d
+                or      e
+                jr      nz,.l1          ; Keep moving DE places
+                jr      UpdatePos
 
-                push    hl
-                call    RealToVirt
-                inc     hl
-                ld      (linepos),hl    ; Update new linepos
-                pop     hl
-                push    hl
+.eol            ; We've passed a $0d character, and so we need to adjust linepos and cursor
+                push    hl              ; Store current position
+
+.l2             ld      a,h
+                or      l               ; HL = beginning of document?
+                jr      nz,.search
+
+.update         ld      (linepos),hl    ; Update beginning of line position
                 ld      hl,(cursorLine)
                 dec     hl
                 ld      (cursorLine),hl
                 pop     hl
-                jr      .l1
+                jr      .cont           ; Keep moving back
 
+.search         dec     hl
+                ld      (pos),hl
+                call    Doc_FetchChar
+                cp      EOL
+                jr      nz,.l2          ; Keep searching back
+                inc     hl              ; Go back to beginning of next line
+                jr      .update
 
-.done           add     hl,de
-                call    RealToVirt
-.done2          ld      (pos),hl
+                ; Update the position and clean up
+UpdatePos:      ld      (pos),hl
                 pop     hl
                 pop     de
                 pop     af
                 ret
+
                 
 Doc_MoveForward:
-        ; Will not move past end of document
-        ; Input
+        ; Move forward DE places in document.  Will not move past end of document.
+        ; Input:
         ;       DE = number of places to move
         ;
+                ; Check the trivial case of not moving any places
                 push    af
                 ld      a,d
                 or      e
@@ -387,38 +395,33 @@ Doc_MoveForward:
                 pop     af
                 ret
 
-.not0           push    de
+.not0           ; Lets try to move forward.
+                push    de
                 push    hl
                 ld      hl,(pos)
-                call    VirtToReal
 
-.l1             ld      a,(hl)
-                cp      EOF
-                jr      z,.done
-                cp      EOL
+.l1             ld      (pos),hl
+                call    Doc_FetchChar
+                cp      EOF             ; End of file before we even begin?
+                jr      z,UpdatePos
+
+                inc     hl              ; Move to next position
+                cp      EOL             ; If EOL, update linepos and cursorLine
                 jr      nz,.no_eol
 
                 push    hl
-                call    RealToVirt
-                inc     hl
                 ld      (linepos),hl
                 ld      hl,(cursorLine)
                 inc     hl
                 ld      (cursorLine),hl
                 pop     hl
 
-.no_eol         inc     hl
-                dec     de
-                ld      a,e
-                or      d
+.no_eol         dec     de
+                ld      a,d
+                or      e
                 jr      nz,.l1
 
-.done           call    RealToVirt
-                ld      (pos),hl
-                pop     hl
-                pop     de
-                pop     af
-                ret
+                jr      UpdatePos
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; CursorVisible
@@ -566,7 +569,6 @@ MoveUp:
                 ; Move to beginning of line
                 ex      de,hl
                 inc     de
-                ;break
                 call    Doc_MoveBack            ; Move back to end of previous line
                 call    Doc_AtStartDoc          ; At beginning of doc?
                 jp      z, CursorVisible        ; Yes, move no more!
@@ -577,6 +579,7 @@ MoveUp:
                 sbc     hl,de                   ; HL >= DE is good!  HL = distance to move back
                 jr      c,.done
 
+                ex      de,hl
                 call    Doc_MoveBack
 .done           jp      CursorVisible
 
