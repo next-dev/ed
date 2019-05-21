@@ -1,3 +1,3 @@
 @echo off
-call make.bat
+call m.bat
 copy /y ed.sna d:\

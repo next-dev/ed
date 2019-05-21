@@ -334,8 +334,7 @@ Doc_MoveBack:
                 jr      nc,.ok          ; Jump if there was room to move back that amount
                 ld      hl,0
                 ld      (linepos),hl
-                ld      (pos),hl
-                ret
+                jr      .done2
 
 .ok             call    VirtToReal
                 ld      e,l
@@ -370,7 +369,7 @@ Doc_MoveBack:
 
 .done           add     hl,de
                 call    RealToVirt
-                ld      (pos),hl
+.done2          ld      (pos),hl
                 pop     hl
                 pop     de
                 pop     af
@@ -560,12 +559,31 @@ MoveRight:
 LastX           dw      0
 
 MoveUp:
-                call    Doc_LineOffset
-                ret
+                ;#todo - Make the cursor return to original horizontal position if possible
+                call    Doc_LineOffset          ; HL = horizontal position
+                ld      (LastX),hl              ; Store it
+
+                ; Move to beginning of line
+                ex      de,hl
+                inc     de
+                ;break
+                call    Doc_MoveBack            ; Move back to end of previous line
+                call    Doc_AtStartDoc          ; At beginning of doc?
+                jp      z, CursorVisible        ; Yes, move no more!
+
+                call    Doc_LineOffset          ; HL = size of previous line
+                ld      de,(LastX)
+                and     a
+                sbc     hl,de                   ; HL >= DE is good!  HL = distance to move back
+                jr      c,.done
+
+                call    Doc_MoveBack
+.done           jp      CursorVisible
 
 ;;----------------------------------------------------------------------------------------------------------------------
 
 MoveDown:
+                ;#todo - Make the cursor return to original horizontal position if possible
                 call    Doc_LineOffset
                 ld      (LastX),hl              ; Store the horizontal position
                 call    Doc_ToNextLine
