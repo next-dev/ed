@@ -99,13 +99,6 @@ Initialise:
 Main:
                 call    ClearScreen
 
-                ld      b,29
-.l1             push    bc
-                call    MoveDown
-                pop     bc
-                djnz    .l1
-                call    CursorVisible
-
 MainLoop:
                 halt
                 call    DisplayScreen
