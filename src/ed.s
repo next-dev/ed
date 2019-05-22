@@ -2,6 +2,17 @@
 ;; Next Editor
 ;;----------------------------------------------------------------------------------------------------------------------
 
+IFDEF _SJASMPLUS
+
+        OPT --zxnext=cspect --syntax=fA --dirbol    ; syntax tuning
+        DEFINE message DISPLAY /D,  ; DISPLAY is mostly compatible with snasm MESSAGE
+        DEFINE PC +($)              ; for current address the operator "$" has to be used
+        MACRO mul : MUL D,E : ENDM  ; MUL needs explicit registers in sjasmplus
+        DEVICE ZXSPECTRUM48         ; setup virtual device for SAVESNA functionality
+
+ELSE
+
+;; snasm specific options and macros
 opt     sna=Start:$BFFE
 opt     zxnext
 opt     zxnextreg
@@ -13,6 +24,8 @@ BREAK   macro
 EXIT    macro
         dw      $00dd
         endm
+
+ENDIF
 
 ;;----------------------------------------------------------------------------------------------------------------------
 ;; Constants
@@ -696,3 +709,5 @@ MoveEnd:
 ;;----------------------------------------------------------------------------------------------------------------------
 
         message "Final address: ",PC
+
+        SAVESNA "ed.sna", Start
