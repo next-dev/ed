@@ -2,7 +2,7 @@
 ;; Next Editor
 ;;----------------------------------------------------------------------------------------------------------------------
 
-opt     sna=Start:$c000
+opt     sna=Start:$BFFE
 opt     zxnext
 opt     zxnextreg
 
@@ -51,7 +51,7 @@ CMDBUFFER       equ     $bd
         incbin  "data/test.txt"
         db      EOF
 
-textlen equ * - $c000
+textlen equ PC - $c000
 
 
 ;;----------------------------------------------------------------------------------------------------------------------
@@ -122,7 +122,7 @@ MainLoop:
 
 ProcessKey:
                 ld      hl,ModeTable
-                ld      a,(Mode)
+                ld      a,(mode)
                 add     a,a
                 add     hl,a
                 add     hl,a
