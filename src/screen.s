@@ -38,6 +38,11 @@ InitVideo:
                 nextreg $6f,$20                 ; Tiles base offset
                 nextreg $4c,8                   ; Transparency colour (bright black)
                 nextreg $68,%10000000           ; Disable ULA output
+                nextreg $1C,$80                 ; reset tilemap clip window index to 0
+                nextreg $1B,0                   ; reset clip window to 640x256
+                nextreg $1B,159
+                nextreg $1B,0
+                nextreg $1B,255
 
 DoneVideo:
                 ret
