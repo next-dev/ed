@@ -38,6 +38,11 @@ InitVideo:
                 nextreg $6f,$20                 ; Tiles base offset
                 nextreg $4c,8                   ; Transparency colour (bright black)
                 nextreg $68,%10000000           ; Disable ULA output
+                nextreg $1C,$80                 ; reset tilemap clip window index to 0
+                nextreg $1B,0                   ; reset clip window to 640x256
+                nextreg $1B,159
+                nextreg $1B,0
+                nextreg $1B,255
 
 DoneVideo:
                 ret
@@ -70,25 +75,16 @@ SetColour:
         ;       C = Ink
         ;       A = Slot (0-15)
         ; Uses:
-        ;       HL, DE, BC, A
+        ;       HL, BC, A
                 nextreg $43,%00110000   ; Set tilemap palette
-                sla     a
-                sla     a
-                sla     a
-                sla     a
+                swapnib
                 nextreg $40,a
-                ; Paper colour
-                ld      de,Palette
-                ld      l,b
-                ld      h,0
-                add     hl,de
-                ld      a,(hl)
-                nextreg $41,a
-                ; Ink colour
-                ld      de,Palette
-                ld      l,c
-                ld      h,0
-                add     hl,de
+                ld      a,b             ; set Paper colour
+                call    .SetColourToA
+                ld      a,c             ; set Ink colour
+.SetColourToA   ; recursive sub-routine
+                ld      hl,Palette
+                add     hl,a
                 ld      a,(hl)
                 nextreg $41,a
                 ret
@@ -109,11 +105,9 @@ CalcTileAddress:
                 mul                 ; DE = 80Y
                 ex      de,hl       ; HL = 80Y
                 pop     de
-                ld      b,0
-                add     hl,bc       ; HL = 80Y+X
-                add     hl,hl       ; 2 bytes per tilemap cell
-                ld      bc,$4000    ; Base address of tilemap
+                ld      b,$20       ; BC = tilemap base address $4000/2 + X coord
                 add     hl,bc
+                add     hl,hl       ; 2 bytes per tilemap cell
                 pop     bc
                 ret
 
@@ -133,22 +127,17 @@ Print:
 
         ; Calculate tilemap address
                 call    CalcTileAddress
-                add     a,a
-                add     a,a
-                add     a,a
-                add     a,a
+                swapnib
                 ld      c,a
-.l1             ld      a,(de)      ; Write out character
-                and     a
-                jr      z,.finish
-                ld      (hl),a
+                jr      .loopEntry
+.l1             ld      (hl),a      ; Write out character
                 inc     hl
-                ld      a,c         ; Write out attribute
-                ld      (hl),a
+                ld      (hl),c      ; Write out attribute
                 inc     hl
+.loopEntry      ld      a,(de)      ; Read next string character
                 inc     de
-                jr      .l1
-.finish         inc     de
+                and     a
+                jr      nz,.l1
                 ret
 
 PrintChar:
@@ -162,8 +151,7 @@ PrintChar:
         ; Uses:
         ;       A
                 call    CalcTileAddress
-                ld      a,e
-                ld      (hl),a
+                ld      (hl),e
                 inc     hl
                 ld      a,d
                 swapnib
@@ -182,12 +170,13 @@ AdvancePos:
         ;       A
         ;
                 inc     c
-                cp      80
+                ld      a,80
+                sub     c
                 ret     nz
-                xor     a
                 ld      c,a
                 inc     b
-                cp      32
+                ld      a,32
+                sub     b
                 ret     nz
                 ld      b,a
                 ret
@@ -205,26 +194,16 @@ WriteSpace:
                 call    CalcTileAddress     ; HL = start corner
                 swapnib
                 ld      c,a                 ; C = colour
-                ld      b,e                 ; Save width
-.row            ld      e,b                 ; Restore width
-
-                push    hl
-
-.col            ld      a,' '               ; Write space
-                ld      (hl),a
+                ld      a,160
+                sub     e
+                sub     e                   ; A = 160 - 2*width = deltaHL
+.row            ld      b,e                 ; reset width counter
+.col            ld      (hl),' '            ; Write space
                 inc     hl
                 ld      (hl),c              ; Write colour
                 inc     hl
-                dec     e
-                jr      nz,.col
-
-        ; Move HL to next row
-                pop     hl
-                ld      e,160
-                ld      a,d                 ; Save row counter
-                ld      d,0
-                add     hl,de               ; HL = next row
-                ld      d,a
+                djnz    .col
+                add     hl,a                ; HL = next row
                 dec     d
                 jr      nz,.row
                 ret
@@ -235,11 +214,9 @@ ClearScreen:
         ;       BC, HL, A
                 ld      bc,2560
                 ld      hl,$4000
-.l1             ld      a,' '
-                ld      (hl),a
+.l1             ld      (hl),' '
                 inc     hl
-                xor     a
-                ld      (hl),a
+                ld      (hl),0
                 inc     hl
                 dec     bc
                 ld      a,b
