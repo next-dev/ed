@@ -165,12 +165,13 @@ AdvancePos:
         ;       A
         ;
                 inc     c
-                cp      80
+                ld      a,80
+                sub     c
                 ret     nz
-                xor     a
                 ld      c,a
                 inc     b
-                cp      32
+                ld      a,32
+                sub     b
                 ret     nz
                 ld      b,a
                 ret
