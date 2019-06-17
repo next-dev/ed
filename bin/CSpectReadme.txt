@@ -1,4 +1,4 @@
-﻿#CSpect V2.7.0 ZXSpectrum emulator by Mike Dailly
+﻿#CSpect V2.8.2 ZXSpectrum emulator by Mike Dailly
 (c)1998-2019 All rights reserved
 
 Be aware...emulator is far from well tested, and might crash for any reason - sometimes just out of pure spite!
@@ -24,6 +24,7 @@ Latest versions can be found here: https://github.com/Threetwosevensixseven/NXte
 Command Line Options
 ======================================================================================
 -zxnext            =  enable Next hardware registers
+-nextrom           =  enable the Next ROM ("enNextZX.rom" and "enNxtmmc.rom" required)
 -zx128             =  enable ZX Spectrum 128 mode
 -s7                =  enable 7Mhz mode
 -s14               =  enable 14Mhz mode
@@ -33,7 +34,8 @@ Command Line Options
 -esc               =  to disable ESCAPE exit key (use exit opcode, close button or ALT+F4 to exit)
 -cur               =  to map cursor keys to 6789 (l/r/d/u)
 -8_3               =  set filenames back to 8.3 detection
--mmc=<dir>\        =  enable RST $08 usage, must provide path to "root" dir of emulated SD card (eg  "-mmc=.\" or "-mmc=c:\test\")
+-mmc=<dir\ or file>=  enable RST $08 usage, must provide path to "root" dir of emulated SD card (eg  "-mmc=.\" or "-mmc=c:\test\")
+-sd2=<path\file>   =  Second SD card image file
 -map=<path\file>   =  SNASM format map file for use in the debugger. format is: "<16bit address> <physical address> <type> <primary_label>[@<local>]"
 -sound             =  disable sound
 -joy               =  disable joysticks
@@ -44,11 +46,61 @@ Command Line Options
 -fullscreen        =  Startup in fullscreen mode
 -vsync             =  Sync to display (for smoother scrolling when using "-60 -sound", but a little faster)
 -com="COM?:BAUD"   =  Setup com port for UART. i.e. -com="COM5:115200". if not set, coms will be disabled.
-
+-stop              =  Start in the debugger.
+-log_cpu           =  Log the CPU status out
+-basickeys		   =  Enable Next BASIC key interface (F10 toggles)
 
 
 Whats new
 ======================================================================================
+v2.8.2
+------
+Right shift now works the same as left shift in BASIC key mode.
+Left ALT now releases the mouse, Left and Right Control is now SymbShift.
+In BASIC key mode if you also disable escape (-esc), escape will bring up the menu allowing you to quit BASIC/re-number etc.
+Fixed a SD card write, now flushes each sector as it writes so that card is always in a complete state
+
+v2.8.1
+------
+Fixed a crash in SD Card writing.
+Added -sd2 for attaching a second SD card
+Added a special ZXBASIC keyboard mode, meaning it'll auto map keys to the spectrum version. (" will map to SYM+P for example)
+Added PageUp, PageDown, Home &  End to ZXBASIC keyboard mode.
+F10 will toggle between game and ZXBASIC keyboard mode
+Fixed a bug when setting the sprite index via NextReg and top bit was set, the shap wasn't being offset by $80
+Added OpenAL install check for windows, if not found sound is disabled. use -sound to bypass check/error dialog
+
+The lovely guys at SpecNext.com have added "images" of the distro, making SD card usage much simpler.
+http://www.zxspectrumnext.online/cspect/
+
+Simply download the one you need.
+http://www.zxspectrumnext.online/cspect/cspect-next-16gb.zip
+http://www.zxspectrumnext.online/cspect/cspect-next-8gb.zip
+http://www.zxspectrumnext.online/cspect/cspect-next-4gb.zip
+http://www.zxspectrumnext.online/cspect/cspect-next-2gb.zip
+There are also some empty SD card images on the main site that you can put into the second SD card slot,
+allowing your work to be separate from the OS (allowing easy upgrading)
+In BASIC you can do 'SAVE "d:name.bas"' to save to the second slot....
+
+
+
+v2.8.0
+------
+Fixed -esc command line, hadn't been ported from 1.x version
+Swapped Right Shift for SYMSHIFT to Right Control. Both shifts map to CAPS SHIFT.  "," still works as SYMSHIFT
+Fixed PUSH XXXX opcode in debugger. Was displaying low/high. Now fixed to display high/low.
+Added "-log_cpu" for tracing the CPU instruction stream
+Added back in Label "switch" to debugger
+Missing "LDWS" opcode added to disassembler
+Fixed bug in ULA off mode where the border was still being drawn
+Fixed bug in 512 tile mode, where it was always above the ULA screen
+Added +3 ROM emulation (without RAM only mode)
+Added divMMC ROM/RAM hardware support via port $E3
+Added divMMC SD card support via ports $E7 and $EB
+SD Card SPI commands supported:CMD0,CMD1,CMD8,CMD9,CMD12,CMD13,CMD16,CMD17,CMD24,CMD55,CMD58,ACMD41
+(see SDCARD setup below to get up and running)
+
+
 V2.7.0
 ------
 Removed debug text output
@@ -538,7 +590,7 @@ F5 - 3.5Mhz mode  	(when not in debugger)
 F6 - 7Mhz mode		(when not in debugger)
 F7 - 14Mhz mode		(when not in debugger)
 F8 - 28Mhz mode		(when not in debugger)
-
+F10 - Toggle Key mode
 
 
 
@@ -599,149 +651,28 @@ LOG IN  [port]      LOG all port reads from [port]. If port is not specified, AL
                     (Logging only occurs when values port changes)
 
 
-LowRes mode
+Some Registers
 ======================================================================================
-Register 21 ($15) bit 7 enables the new mode. Layer priorities work as normal.
-Register 50 ($32) Lowres X scroll (0-255) auto wraps
-Register 51 ($32) Lowres Y scroll (0-191) auto wraps
-
-Can not use shadow screen. Setting the shadow screen bit will switch to the standard ULA screen.
-Screen is 128x96 byte-per-pixels in size. 
-Top half  : 128x48 located at $4000 to $5800
-Lower half: 128x48 located at $6000 to $6800
-
-
-XScroll: 0-255
-Being only 128 pixels in resolution, this allows the display to scroll in half pixels, at the same resolution and smoothness as Layer 2.
-
-YScroll: 0-191
-Being only 96 pixels in resolution, this allows the display to scroll in half pixels, at the same resolution and smoothness as Layer 2.
-
-
-
-
-ULANext mode
-======================================================================================
-(W) 0x40 (64) => Palette Index
-  bits 7-0 = Select the palette index to change the default colour. 
-  0 to 127 indexes are to ink colours and 128 to 255 index are to papers.
-  (Except full ink colour mode, that all values 0 to 255 are inks)
-  Border colours are the same as paper 0 to 7, positions 128 to 135,
-  even at full ink mode. 
-
-(W) 0x41 (65) => Palette Value
-  bits 7-0 = Colour for the palette index selected by the register 0x40. Format is RRRGGGBB
-  After the write, the palette index is auto-incremented to the next index. 
-  The changed palette remains until a Hard Reset.
-
-(W) 0x42 (66) => Palette Format
-  bits 7-0 = Number of the last ink colour entry on palette. (Reset to 15 after a Reset)
-  This number can be 1, 3, 7, 15, 31, 63, 127 or 255.
-  The 255 value enables the full ink colour mode and 
-  all the the palette entries are inks with black paper.
-
-(W) 0x43 (67) => Palette Control
-  bits 7-2 = Reserved, must be 0
-  bit 1 = Select the second palette
-  bit 0 = Disable the standard Spectrum flash feature to enable the extra colours
-
-(W) 0x44 (68) => Palette Lower bit
-  bits 7-1 = Reserved, must be 0
-  bit 0 = Set the lower blue bit colour for the current palette value
-
-
-Without Palette Control bit 0 set.
-Palette[0-15] = INK colours  					(0-7 normal, 8-15 =BRIGHT)
-Palette[128-143] = Paper + Border colours		(0-7 normal, 8-15 =BRIGHT)
-
-
-WITH Palette Control bit 0 set
-Attribute byte swaps to paper/ink selection only. 
-Palette Format specifies the number of colours INK will use. default is 15, so attribute if PPPPIIII
-1  = PPPPPPPI
-3  = PPPPPPII
-7  = PPPPPIII
-15 = PPPPIIII
-31 = PPPIIIII
-63 = PPIIIIII
-127= PIIIIIII
-255= IIIIIIII
-Note if mode is 255, then Paper colour is 0 (in paper range, palette index 128)
-Border colours always come from paper banks, palette index 128-135
-
-
 
 Layer 2 access
-======================================================================================
-Register 18 = 	bank of Layer 2 front buffer
-Register 19 = 	bank of Layer 2 back buffer 
-Register 21 = 	sprite system.  
-		bits 4,3,2 = layer order  
-		000   S L U		 (sprites on top)
-		001   L S U
-		010   S U L
-		011   L U S
-		100   U S L
-		101   U L S
-Register $20	; Layer 2 transparency color working
-
+==============
 port $123b
 bit 0 = WRITE paging on. $0000-$3fff write access goes to selected Layer 2 page 
 bit 1 = Layer 2 ON (visible)
 bit 3 = Page in back buffer (reg 19)
 bit 6/7= VRAM Banking selection (layer 2 uses 3 banks) (0,$40 and $c0 only)
 
-
-Layer 2 xscroll
-===================
-ld      bc, $243B		; select the X scroll register
-ld      a,22
-out     (c),a
-ld	a,<scrollvalue>		; 0 to 255
-ld      bc, $253B
-out     (c),a
-
-Layer 2 yscroll
-===================
-ld      bc, $243B		; select the Y scroll register
-ld      a,23
-out     (c),a
-ld	a,<scrollvalue>		; 0 to 191
-ld      bc, $253B
-out     (c),a
-
-Layer 2: $E3	; bright magenta acts as transparent
+Tilemap format
+==============
+bits 15-12 : palette offset
+bit 11 : x mirror
+bit 10 : y mirror
+bit 9 : rotate
+bit 8 : ula over tilemap
+bits 7-0 : tile id
 
 
-Layer 2 window mode
-====================
-(W) 0x18 (24) => Clip Window Layer 2
-  bits 7-0 = Cood. of the clip window
-  1st write - X1 position
-  2nd write - X2 position
-  3rd write - Y1 position
-  4rd write - Y2 position
-  The values are 0,255,0,191 after a Reset
 
-Sprite window mode
-===================
-(W) 0x19 (25) => Clip Window Sprites
-  bits 7-0 = Cood. of the clip window
-  1st write - X1 position
-  2nd write - X2 position
-  3rd write - Y1 position
-  4rd write - Y2 position
-  The values are 0,255,0,191 after a Reset
-  Clip window on Sprites only work when the "over border bit" is disabled
-
-
-Clip window resets
-===================
-(W) 0x1C (28) => Clip Window control
-  bits 7-3 = Reserved, must be 0
-  bit 2 - reset the ULA/LoRes clip index.
-  bit 1 - reset the sprite clip index.
-  bit 0 - reset the Layer 2 clip index.
 
 
 Kempston mouse 
@@ -763,23 +694,6 @@ Fire/B= 16
 C     = 32		; Sega pad
 A     = 64		; Sega pad
 Start = 128		; Sega pad
-
-(R/W) 0x05 (05) => Peripheral 1 setting:
-  bits 7-6 = joystick 1 mode (LSB)
-  bits 5-4 = joystick 2 mode (LSB)
-  bit 3 = joystick 1 mode (MSB)
-  bit 2 = 50/60 Hz mode (0 = 50Hz, 1 = 60Hz)(0 after a PoR or Hard-reset)
-  bit 1 = joystick 2 mode (MSB)
-  bit 0 = Enable Scandoubler (1 = enabled)(1 after a PoR or Hard-reset)
-      Joysticks modes:
-      000 = Sinclair 2 (67890)
-      001 = Kempston 1 (port 0x1F)
-      010 = Cursor (56780)
-      011 = Sinclair 1 (12345)
-      100 = Kempston 2 (port 0x5F)
-      101 = MD 1 (3 or 6 button joystick port 0x1F)
-      110 = MD 2 (3 or 6 button joystick port 0x5F)
-
 
 
 esxDOS simulation
@@ -814,24 +728,8 @@ if LoadingScreen!=0 {
 Banks[...]						// Bank 5 is first (loaded to $4000), then bank 2 (to $8000) then bank 0(to $C000)  - IF these banks are in the file via Banks[] array
 
 
-
-(R/W) 0x09 (09) => Peripheral 4 setting:
-  bits 7-2 = Reserved, must be 0
-  bits 1-0 = scanlines (0 after a PoR or Hard-reset)
-     00 = scanlines off
-     01 = scanlines 75%
-     10 = scanlines 50%
-     11 = scanlines 25%
-
-
-(R/W) 0x4A (74) => Transparency colour fallback
-  bits 7-0 = Set the 8 bit colour.
-  (0 = black on reset on reset)
-
-
-
-  Next OS streaming API
-  ---------------------
+Next OS streaming API
+---------------------
 ; *************************************************************************** 
 ; * DISK_FILEMAP ($85)                                                      * 
 ; *************************************************************************** 
@@ -891,126 +789,29 @@ Banks[...]						// Bank 5 is first (loaded to $4000), then bank 2 (to $8000) the
 
 
 
+Manual SDCARD setup 
+-------------------
+Download the latest SD card from https://www.specnext.com/category/downloads/
+Copy onto an SD card (preferably 2GB and less than 16GB as it's your Next HD for all your work)
+Copy the files "enNextZX.rom" and "enNxtmmc.rom" from this SD Card into the root of the CSpect folder
+Download Win32DiskImager ( https://sourceforge.net/projects/win32diskimager/ )
+make an image of the SD card
+start CSpect with the command line... 
 
-nextreg 0x1b:
-clip window for tilemap; the x coords are multiplied by 2 to cover 320 pixel width.
+"CSpect.exe -w3 -zxnext -nextrom -mmc=<SD_CARD_PATH>\sdcard.img"
 
-
-(R/W) 0x43 (67) => Palette Control
-  bit 7 = '1' to disable palette write auto-increment.
-  bits 6-4 = Select palette for reading or writing:
-     000 = ULA first palette
-     100 = ULA secondary palette
-     001 = Layer 2 first palette
-     101 = Layer 2 secondary palette
-     010 = Sprites first palette 
-     110 = Sprites secondary palette
-     011 = tilemap first palette
-     111 = tilemap second palette
-  bit 3 = Select Sprites palette (0 = first palette, 1 = secondary palette)
-  bit 2 = Select Layer 2 palette (0 = first palette, 1 = secondary palette)
-  bit 1 = Select ULA palette (0 = first palette, 1 = secondary palette)
-  bit 0 = Disable the standard Spectrum flash feature to enable the extra 
-          colours. (0 after a reset)
-
-Stencil mode and ula / layer 2 mix mode added to nextreg 0x49:
-;nextreg 0x49:
-bit 7 = 1 to enable ula
-bit 6 = 1 to enable stencil mode when both ula and tm are enabled
-          if either ula or tm is transparent, result is transparent else logical AND of both
-bit 5 = 0 to have ula only highlight layer 2 else final colour from ula highlights layer 2
-
-
-nextreg 0x31
-y scroll
-
-nextreg 0x30
-x scroll bits 7-0 LSB
-
-nextreg 0x2f
-x scroll bits 0-1 MSB
-
-  
-nextreg 0x4c:
-bit 7 = 1 to enable tilemap
-bit 6 =0 for 40x32, 1 for 80x32
-bit 5 = eliminate flags in tilemap
-bit 4 = palette select
-bits 3-0 = transparent index
-
-nextreg 0x4d:
-MSB tilemap address (bits 5:0)
-
-nextreg 0x4e:
-MSB tile definitions address (bits 5:0)
-
-nextreg 0x4f:
-default tilemap attribute (when bit 5 of nextreg 0x4c = 1)
-
-y scroll
-nextreg 0x30
-x scroll bits 7-0 LSB
-
-nextreg 0x2f
-x scroll bits 0-1 MSB
-Tiles defined at 0x4c00 (32 bytes each).  Tilemap starts at 0x6c00.  The tilemap is stored in Y major order.  
-Ie x=0,y=0, x=0,y=1, ..., x=0,y=31, x=1,y=0, ....
-
-
-;Tiles defined at default 0x4c00 (32 bytes each).
-;Tilemap starts at default 0x6c00.
-;The tilemap is stored in X major order.
-
-
-Tilemap entry is two bytes:
-bits 15-12 : palette offset
-bit 11 : x mirror
-bit 10 : y mirror
-bit 9 : rotate
-bit 8 : ula over tilemap
-bits 7-0 : tile id
+I'd also recommend downloading HDFMonkey, which lets you copy files to/from the SD image. 
+This tool can be used while CSpect is running, meaning you can just reset and remount the image
+if you put new files on it - just like the real machine.
+This tool also lets you rescue files saved onto the image by CSpect - like a BASIC program
+you may have written, or a hiscore file from a game etc.
+I found a copy of this tool here: http://uto.speccy.org/downloads/hdfmonkey_windows.zip
 
 
 
 
-ULA scroll test v0.1 beta, 
-keys: 
-	Q A O P move ULA : 
-	R reset scroll 0,0 : 
-	U toggle ULA ON/OFF : 
-	L toggle LAYER 2 ON/OFF : 
-	S toggle sprites ON/OFF : 
-	C reset clipping window to 0,0,255,191 : 
-	CURSORS adjust ULA clipping wndow X1,Y1 : 
-	CURSORS+SYMBOL SHIFT adjust ULA clipping window X2,Y2
-
-
-
-Tilemap Test Map v0.9 beta 
-Q A O P (move tilemap) : 
-CURSORS (adjust clipping X1,Y1) 
-CURSORS+SYMBOL SHIFT (adjust clipping X2,Y2) : 
-C reset clipping to 320x256 : 
-U set clipping to 32,32,256,192 : 
-S toggle sprites ON/OFF : 
-R reset scroll position to 0,0 : 
-V toggle view mode priority (ULA<->TILEMAP) : 
-D toggle ULA clip window 0,0,0,0 / 0,255,0,191 (dot mode) : 
-F toggle 0x07 / 0xDE at location 0x5800 (flash mode, attributes) : 
-L toggle LAYER 2 ON/OFF : 
-X set map in X/Y mode (default) : 
-Y set map in Y/X mode : 
-T toggle tilemap ON/OFF : 
-H toggle 40x32/80x32 mode
-
-Full ULA, 6912. 
-Map 1280 (40x32) at 23296, 
-8K of tiles from 24576 .. fills the entire bank
-map should be at 0x5B00 and tiles at 0x6000
-
-
-
-
-
+ZX Spectrum ROM
+----------------
+Amstrad have kindly given their permission for the redistribution of their copyrighted material but retain that copyright
 
 

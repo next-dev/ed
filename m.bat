@@ -1,3 +1,4 @@
 @echo off
-bin\snasm -map src\ed.s ed.sna
+bin\snasm src\ed.s
+bin\hdfmonkey put \sdcard\cspect-next-2gb.img ed.nex
 rem sjasmplus lom.s 

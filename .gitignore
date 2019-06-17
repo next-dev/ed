@@ -1,2 +1,5 @@
-*.sna
-*.sna.map
+/*.sna
+/*.sna.map
+/*.nex
+src/*.dat
+

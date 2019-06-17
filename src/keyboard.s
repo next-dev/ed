@@ -7,15 +7,15 @@
 ;;
 ;;----------------------------------------------------------------------------------------------------------------------
 
-                org     $7f00
+                org     $8000
 
-                ds      257,$80         ; Interrupt vector table
+                ds      257,$81         ; Interrupt vector table
 
 BUFFERPAGE      equ     $be
 
 InitKeys:
                 di
-                ld      a,$7f
+                ld      a,$80
                 ld      i,a
                 im      2
                 ei
@@ -67,7 +67,7 @@ DoneKeys:       di
 ;   B0-B9 - Ext+Number
 ;   E1-FA - Ext+Letter
 
-                org     $8080
+                org     $8181
 
 ImRoutine:
                 di
